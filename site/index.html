@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>국장 RSI 과매도</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  /* 레이아웃: 결론 한 줄 → 오늘 종목 카드 → 지난 신호 추이, 한 화면 스크롤 */
+  :root {
+    --bg: #f3f4f6; --card: #ffffff; --ink: #16181d; --ink2: #3b404a; --muted: #6f7480; --line: #e3e5ea;
+    --chip: #e9ebef; --grid: #eceef2;
+    --down: #2a62d4; --up: #d23b2b; --mark: #2a62d4;
+    --good: #1f8a5b; --goodbg: #e2f3ea; --mid: #a86a00; --midbg: #fbf0d9; --bad: #6f7480; --badbg: #eceef1;
+    --sans: "IBM Plex Sans KR", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #111317; --card: #1a1d22; --ink: #eceef2; --ink2: #c4c8d0; --muted: #8d929c; --line: #2a2e35;
+    --chip: #252930; --grid: #23272d;
+    --down: #6c9bf5; --up: #f27b6b; --mark: #6c9bf5;
+    --good: #53c48d; --goodbg: #17322a; --mid: #e3ac4a; --midbg: #3a2d14; --bad: #9aa0aa; --badbg: #262a30;
+    color-scheme: dark; } }
+  :root[data-theme="dark"] {
+    --bg: #111317; --card: #1a1d22; --ink: #eceef2; --ink2: #c4c8d0; --muted: #8d929c; --line: #2a2e35;
+    --chip: #252930; --grid: #23272d;
+    --down: #6c9bf5; --up: #f27b6b; --mark: #6c9bf5;
+    --good: #53c48d; --goodbg: #17322a; --mid: #e3ac4a; --midbg: #3a2d14; --bad: #9aa0aa; --badbg: #262a30;
+    color-scheme: dark; }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 980px; margin: 0 auto; padding-block: 20px 64px; padding-inline: 16px; display: grid; gap: 18px; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .neg { color: var(--down); } .pos { color: var(--up); }
+  [hidden] { display: none !important; }
+
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .brand { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  .brand span { color: var(--muted); font-weight: 500; margin-left: 6px; font-size: 13px; }
+  select { font: inherit; font-size: 13px; padding: 7px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+
+  .hero { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; display: grid; grid-template-columns: 1fr minmax(0, 340px); gap: 18px; align-items: center; }
+  .hero h1 { margin: 0; font-size: clamp(22px, 4.6vw, 30px); line-height: 1.3; letter-spacing: -0.03em; text-wrap: balance; }
+  .hero h1 em { font-style: normal; color: var(--down); }
+  .hero p { margin: 8px 0 0; color: var(--ink2); font-size: 14px; line-height: 1.6; }
+  .hero p b { font-weight: 600; }
+  .gradeSum { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .heroChart { min-width: 0; }
+  .heroChart .cap { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+
+  .pill { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .g-양호 { background: var(--goodbg); color: var(--good); }
+  .g-보통 { background: var(--midbg); color: var(--mid); }
+  .g-주의 { background: var(--badbg); color: var(--bad); }
+  .pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .bar .sp { flex: 1; }
+  .seg { display: inline-flex; background: var(--chip); border-radius: 10px; padding: 3px; gap: 2px; }
+  .seg button { font: inherit; font-size: 13px; padding: 6px 11px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+  .seg button.on { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  button:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--down); outline-offset: 2px; }
+  .hint { font-size: 12px; color: var(--muted); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+  .card.dim { opacity: .72; }
+  .head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+  .who { min-width: 0; }
+  .who .nm { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .who .sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .px { text-align: right; flex-shrink: 0; }
+  .px .p { font-size: 17px; font-weight: 600; }
+  .px .c { font-size: 13px; margin-top: 2px; }
+  .rsiRow { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; padding-bottom: 10px; }
+  .rsiVal { font-size: 13px; color: var(--ink2); }
+  .rsiVal b { font-family: var(--mono); font-size: 15px; color: var(--down); }
+  .gauge { position: relative; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--down) 0 10%, var(--chip) 10% 30%, var(--grid) 30% 100%); }
+  .gauge i { position: absolute; top: -4px; width: 3px; height: 14px; border-radius: 2px; background: var(--ink); transform: translateX(-1px); }
+  .gauge span { position: absolute; top: 9px; font-size: 10px; color: var(--muted); transform: translateX(-50%); font-family: var(--mono); }
+  .chartBox { min-width: 0; }
+  .legend { display: flex; gap: 10px; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .legend i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--mark); margin-right: 4px; vertical-align: 1px; }
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .metrics div { background: var(--bg); border-radius: 10px; padding: 8px 9px; min-width: 0; }
+  .metrics span { display: block; font-size: 11px; color: var(--muted); }
+  .metrics b { display: block; font-size: 13px; font-weight: 600; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .notes { display: grid; gap: 6px; font-size: 13px; color: var(--ink2); line-height: 1.5; }
+  .notes .warn { color: var(--up); font-weight: 600; }
+  .notes .lbl { display: inline-block; font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; margin-right: 6px; }
+  a.out { font-size: 13px; color: var(--down); text-decoration: none; font-weight: 500; justify-self: start; }
+
+  .empty { padding: 36px 16px; text-align: center; color: var(--muted); font-size: 14px; background: var(--card); border: 1px dashed var(--line); border-radius: 16px; }
+
+  .sec h2 { margin: 10px 0 4px; font-size: 19px; letter-spacing: -0.02em; }
+  .sec > p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .stat .v { font-size: 20px; font-weight: 600; }
+  .stat .k { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .stat .s { font-size: 11px; color: var(--muted); }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  .panel.pad { padding: 14px 14px 8px; }
+  .sig { border-top: 1px solid var(--line); }
+  .sig:first-child { border-top: 0; }
+  .sig > button { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 1fr 100px 78px; gap: 10px; align-items: center; width: 100%; padding: 12px 16px; cursor: pointer; }
+  .sig > button:focus-visible { outline: 2px solid var(--down); outline-offset: -2px; }
+  .sig .nm { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sig .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .ret { text-align: right; font-weight: 600; font-size: 15px; }
+  .ret small { display: block; font-family: var(--sans); font-weight: 400; font-size: 11px; color: var(--muted); }
+  .detail { padding: 0 16px 14px; }
+  .kv { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
+  .kv div { background: var(--bg); border-radius: 10px; padding: 8px; text-align: center; font-size: 11px; color: var(--muted); }
+  .kv b { display: block; font-size: 14px; color: var(--ink); margin-top: 2px; }
+  .detail a.out { display: inline-block; margin-top: 10px; }
+  .more { display: block; width: 100%; font: inherit; font-size: 13px; padding: 12px; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--down); cursor: pointer; }
+  footer { font-size: 12px; color: var(--muted); line-height: 1.7; }
+
+  @media (max-width: 640px) {
+    .hero { grid-template-columns: 1fr; padding: 18px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .metrics { grid-template-columns: repeat(2, 1fr); }
+    .sig > button { grid-template-columns: 1fr 70px 70px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">국장 RSI 과매도<span id="basis">코스피·코스닥 전 종목</span></div>
+    <select id="date" aria-label="기준일"></select>
+  </div>
+
+  <section class="hero" aria-live="polite">
+    <div>
+      <h1 id="headline">불러오는 중…</h1>
+      <p id="subline"></p>
+      <div class="gradeSum" id="gradeSum"></div>
+    </div>
+    <div class="heroChart">
+      <div class="cap">지난 신호 평균 수익률 (신호일 종가 대비)</div>
+      <div id="heroChart"></div>
+    </div>
+  </section>
+
+  <div class="bar">
+    <div class="seg" id="gradeSeg" role="group" aria-label="등급">
+      <button class="on" data-g="ALL">전체</button>
+      <button data-g="양호">양호</button>
+      <button data-g="보통">보통</button>
+      <button data-g="NOBAD">주의 빼고</button>
+    </div>
+    <div class="seg" id="mktSeg" role="group" aria-label="시장">
+      <button class="on" data-m="ALL">전체</button>
+      <button data-m="KOSPI">코스피</button>
+      <button data-m="KOSDAQ">코스닥</button>
+    </div>
+    <div class="sp"></div>
+    <div class="hint">양호 = 시총 1조↑·거래대금 50억↑ · 주의 = 위험표시·시총 1천억↓·거래대금 10억↓</div>
+  </div>
+
+  <div class="cards" id="cards"></div>
+
+  <section class="sec">
+    <h2>지난 신호, 지금은?</h2>
+    <p>RSI가 10 아래로 떨어진 날 종가를 기준으로, 이후 60거래일 동안의 수익률</p>
+    <div class="stats" id="hStats"></div>
+    <div class="panel pad" style="margin-top:10px"><div id="avgChart"></div></div>
+    <div class="bar" style="margin:12px 0 10px">
+      <div class="seg" id="stSeg" role="group" aria-label="추적 상태">
+        <button class="on" data-s="ALL">전체</button>
+        <button data-s="ACTIVE">추적 중</button>
+        <button data-s="DONE">60일 완료</button>
+      </div>
+    </div>
+    <div class="panel" id="sigList"></div>
+  </section>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => Number(n).toLocaleString("ko-KR");
+const pct = (v) => (v > 0 ? "+" : "") + v.toFixed(1) + "%";
+const cls = (v) => (v < 0 ? "neg" : v > 0 ? "pos" : "");
+const ymd = (s) => `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6)}`;
+const eok = (v) => v == null ? "–" : v >= 10000 ? (v / 10000).toFixed(v >= 100000 ? 0 : 1) + "조" : fmt(Math.round(v)) + "억";
+const ORDER = { "양호": 0, "보통": 1, "주의": 2 };
+const TRACK_DAYS = 60;
+let today = null, tracking = [], gradeF = "ALL", mkt = "ALL", st = "ALL", showN = 12;
+
+async function getJSON(p) { const r = await fetch(p + "?t=" + Date.now()); if (!r.ok) throw 0; return r.json(); }
+
+function niceStep(raw) { const p = Math.pow(10, Math.floor(Math.log10(raw || 1))); const n = raw / p; return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * p; }
+function retChart(values, { w = 600, h = 200, compact = false } = {}) {
+  const pts = values.map((v, i) => [i + 1, v]).filter((p) => p[1] != null);
+  if (!pts.length) return `<div class="hint" style="padding:24px 0;text-align:center">아직 쌓인 기록이 없어요</div>`;
+  const pad = compact ? [8, 30, 20, 38] : [12, 30, 24, 42];
+  const xs = Math.max(values.length, 2), ys = pts.map((p) => p[1]);
+  let lo = Math.min(0, ...ys), hi = Math.max(0, ...ys); const sp = hi - lo || 1; lo -= sp * .12; hi += sp * .12;
+  const [pt, pr, pb, pl] = pad;
+  const X = (i) => pl + ((i - 1) / (xs - 1)) * (w - pl - pr), Y = (v) => pt + (1 - (v - lo) / (hi - lo)) * (h - pt - pb);
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join("");
+  const last = pts[pts.length - 1], col = last[1] < 0 ? "var(--down)" : "var(--up)";
+  let g = ""; const step = niceStep((hi - lo) / (compact ? 3 : 4));
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step)
+    g += `<line x1="${pl}" x2="${w - pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${pl - 6}" y="${Y(v) + 4}" font-size="11" text-anchor="end" fill="var(--muted)" font-family="var(--mono)">${Math.round(v * 10) / 10}%</text>`;
+  (w < 420 ? [1, 20, 40, 60] : [1, 5, 10, 20, 40, 60]).filter((t) => t <= xs).forEach((t) =>
+    g += `<text x="${X(t)}" y="${h - 5}" font-size="11" text-anchor="middle" fill="var(--muted)">D+${t}</text>`);
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:block;max-width:100%" role="img" aria-label="신호 이후 수익률 추이">
+    ${g}<line x1="${pl}" x2="${w - pr}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--muted)" stroke-dasharray="3 3" opacity=".7"/>
+    <path d="${d}L${X(last[0])},${Y(0)}L${X(pts[0][0])},${Y(0)}Z" fill="${col}" opacity=".1"/>
+    <path d="${d}" fill="none" stroke="${col}" stroke-width="2.2" stroke-linejoin="round"/>
+    <circle cx="${X(last[0])}" cy="${Y(last[1])}" r="3.5" fill="${col}"/></svg>`;
+}
+function priceChart(s, low, w) {
+  const h = 120, pad = [14, 6, 16, 6];
+  const lo = Math.min(...s), hi = Math.max(...s), sp = hi - lo || 1;
+  const X = (i) => pad[3] + (i / (s.length - 1)) * (w - pad[1] - pad[3]);
+  const Y = (v) => pad[0] + (1 - (v - lo) / sp) * (h - pad[0] - pad[2]);
+  const d = s.map((v, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join("");
+  const hiI = s.indexOf(hi);
+  const band = low.length ? `<rect x="${X(low[0]) - 3}" y="${pad[0]}" width="${X(low[low.length - 1]) - X(low[0]) + 6}" height="${h - pad[0] - pad[2]}" fill="var(--mark)" opacity=".08" rx="3"/>` : "";
+  const dots = low.map((i) => `<circle cx="${X(i)}" cy="${Y(s[i])}" r="3" fill="var(--mark)"/>`).join("");
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:block;max-width:100%" role="img" aria-label="최근 90거래일 주가">
+    ${band}<path d="${d}L${X(s.length - 1)},${h - pad[2]}L${X(0)},${h - pad[2]}Z" fill="var(--ink2)" opacity=".06"/>
+    <path d="${d}" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-linejoin="round"/>${dots}
+    <text x="${Math.min(Math.max(X(hiI), 34), w - 34)}" y="${pad[0] - 4}" font-size="10" text-anchor="middle" fill="var(--muted)" font-family="var(--mono)">고점 ${fmt(hi)}</text>
+    <text x="${pad[3]}" y="${h - 3}" font-size="10" fill="var(--muted)">90거래일 전</text>
+    <text x="${w - pad[1]}" y="${h - 3}" font-size="10" text-anchor="end" fill="var(--muted)">최근</text></svg>`;
+}
+function sparkRet(path) {
+  const v = path.map((p) => p.r), w = 100, h = 30, lo = Math.min(0, ...v), hi = Math.max(0, ...v), sp = hi - lo || 1;
+  const X = (i) => 2 + i / (v.length - 1) * (w - 4), Y = (x) => 3 + (1 - (x - lo) / sp) * (h - 6);
+  const col = v[v.length - 1] < 0 ? "var(--down)" : "var(--up)";
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:block;max-width:100%" aria-hidden="true">
+    <line x1="2" x2="${w - 2}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--muted)" stroke-dasharray="2 2" opacity=".5"/>
+    <path d="${v.map((x, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(x).toFixed(1)}`).join("")}" fill="none" stroke="${col}" stroke-width="1.6"/></svg>`;
+}
+
+function avgAt(list, k) {
+  const r = list.filter((s) => s.path.length >= k).map((s) => s.path[k - 1].r);
+  return r.length ? { avg: r.reduce((a, b) => a + b, 0) / r.length, win: r.filter((v) => v > 0).length / r.length * 100, n: r.length } : null;
+}
+function avgPath(list) { return Array.from({ length: TRACK_DAYS }, (_, k) => { const a = avgAt(list, k + 1); return a ? a.avg : null; }); }
+
+function renderHero() {
+  const items = today ? today.items : [];
+  const by = (g) => items.filter((x) => x.grade === g).length;
+  $("basis").textContent = today ? `${today.date} 종가 기준 · ${fmt(today.scanned)}종목 스캔` : "";
+  if (today) $("headline").innerHTML = items.length
+    ? `오늘 <em>${items.length}종목</em>이 RSI ${today.threshold} 아래로 떨어졌어요`
+    : `오늘은 RSI ${today.threshold} 아래 종목이 없어요`;
+  const d5 = avgAt(tracking, 5), d20 = avgAt(tracking, 20);
+  $("subline").innerHTML = d5
+    ? `지난 신호 ${tracking.length}건은 평균 5일 뒤 <b class="${cls(d5.avg)}">${pct(d5.avg)}</b>` +
+      (d20 ? `, 20일 뒤 <b class="${cls(d20.avg)}">${pct(d20.avg)}</b>` : "") + `. 5일 뒤 오른 비율은 ${d5.win.toFixed(0)}%예요.`
+    : "지난 신호 기록이 쌓이면 여기서 평균 성과를 보여줘요.";
+  $("gradeSum").innerHTML = ["양호", "보통", "주의"].filter(by).map((g) => `<span class="pill g-${g}"><i></i>${g} ${by(g)}</span>`).join("");
+  $("heroChart").innerHTML = retChart(avgPath(tracking), { w: Math.max(260, $("heroChart").clientWidth || 340), h: 150, compact: true });
+}
+
+function renderCards() {
+  if (!today) { $("cards").innerHTML = ""; return; }
+  const items = today.items.filter((x) => (mkt === "ALL" || x.market === mkt) &&
+    (gradeF === "ALL" || (gradeF === "NOBAD" ? x.grade !== "주의" : x.grade === gradeF)))
+    .sort((a, b) => (ORDER[a.grade] ?? 1) - (ORDER[b.grade] ?? 1) || a.rsi - b.rsi);
+  if (!items.length) { $("cards").innerHTML = `<div class="empty">조건에 맞는 종목이 없어요</div>`; return; }
+  $("cards").innerHTML = items.map((x) => `
+    <article class="card ${x.grade === "주의" ? "dim" : ""}" data-code="${x.code}">
+      <div class="head">
+        <div class="who">
+          <div class="nm">${x.name}<span class="pill g-${x.grade || "보통"}"><i></i>${x.grade || "–"}</span></div>
+          <div class="sub">${x.market === "KOSPI" ? "코스피" : "코스닥"} · ${x.code}</div>
+        </div>
+        <div class="px"><div class="p num">${fmt(Math.round(x.close))}원</div><div class="c num ${cls(x.chg)}">${pct(x.chg)}</div></div>
+      </div>
+      <div class="rsiRow">
+        <div class="rsiVal">RSI <b>${x.rsi.toFixed(1)}</b></div>
+        <div class="gauge" aria-hidden="true"><i style="left:${x.rsi}%"></i><span style="left:10%">10</span><span style="left:30%">30</span><span style="left:70%">70</span></div>
+      </div>
+      ${x.spark ? `<div class="chartBox"><div class="spk"></div><div class="legend"><span><i></i>RSI ${today.threshold} 이하였던 날</span></div></div>` : ""}
+      <div class="metrics">
+        <div><span>시가총액</span><b class="num">${x.mcap != null ? eok(x.mcap) : "–"}</b></div>
+        <div><span>거래대금 20일 평균</span><b class="num">${x.tv20 != null ? fmt(x.tv20) + "억" : "–"}</b></div>
+        <div><span>PER · PBR</span><b class="num">${x.per != null ? x.per.toFixed(1) : "–"} · ${x.pbr != null ? x.pbr.toFixed(2) : "–"}</b></div>
+        <div><span>52주 고점 대비</span><b class="num neg">${x.from_high != null ? pct(x.from_high) : "–"}</b></div>
+      </div>
+      <div class="notes">
+        ${x.flags && x.flags.length ? `<div class="warn">⚠ ${x.flags.join(", ")}</div>` : ""}
+        ${x.news ? `<div><span class="lbl">최근 뉴스</span>${x.news}</div>` : ""}
+        ${x.hist ? `<div><span class="lbl">이 종목 과거</span>RSI 10 이하 ${x.hist.n}회 · 5일 뒤 평균 <b class="${cls(x.hist.d5)}">${pct(x.hist.d5)}</b>${x.hist.d20 != null ? ` · 20일 뒤 <b class="${cls(x.hist.d20)}">${pct(x.hist.d20)}</b>` : ""}</div>`
+                 : `<div><span class="lbl">이 종목 과거</span>기록상 첫 신호</div>`}
+      </div>
+      <a class="out" href="https://m.stock.naver.com/domestic/stock/${x.code}/total" target="_blank" rel="noopener">네이버 증권에서 차트·뉴스 보기 →</a>
+    </article>`).join("");
+  $("cards").querySelectorAll(".card").forEach((el) => {
+    const x = items.find((i) => i.code === el.dataset.code), box = el.querySelector(".spk");
+    if (box && x.spark) box.innerHTML = priceChart(x.spark, x.low || [], Math.max(240, box.clientWidth || 400));
+  });
+}
+
+function renderTrack() {
+  const list = tracking.filter((s) => st === "ALL" || (st === "ACTIVE" ? s.path.length < TRACK_DAYS : s.path.length >= TRACK_DAYS));
+  $("hStats").innerHTML = [1, 5, 20, 60].map((k) => {
+    const a = avgAt(list, k);
+    return a ? `<div class="stat"><div class="v num ${cls(a.avg)}">${pct(a.avg)}</div><div class="k">${k}일 뒤 평균</div><div class="s">오른 비율 ${a.win.toFixed(0)}% · ${a.n}건</div></div>`
+             : `<div class="stat"><div class="v num">–</div><div class="k">${k}일 뒤 평균</div><div class="s">기록 쌓이는 중</div></div>`;
+  }).join("");
+  $("avgChart").innerHTML = retChart(avgPath(list), { w: Math.max(280, $("avgChart").clientWidth || 600), h: window.innerWidth < 641 ? 190 : 230 });
+  if (!list.length) { $("sigList").innerHTML = `<div class="empty" style="border:0">해당하는 신호가 없어요</div>`; return; }
+  const shown = list.slice(0, showN);
+  $("sigList").innerHTML = shown.map((s, i) => {
+    const n = s.path.length, last = n ? s.path[n - 1] : null;
+    return `<div class="sig" data-i="${i}"><button aria-expanded="false">
+      <div style="min-width:0"><div class="nm">${s.name}</div><div class="sub">${ymd(s.date)} 신호 · 그날 종가 ${fmt(Math.round(s.entry))}원</div></div>
+      <div>${n > 1 ? sparkRet(s.path) : ""}</div>
+      <div class="ret num ${last ? cls(last.r) : ""}">${last ? pct(last.r) : "–"}<small>${n ? (n >= TRACK_DAYS ? "60일 완료" : `${n}일째`) : "내일부터"}</small></div>
+    </button><div class="detail" hidden></div></div>`;
+  }).join("") + (list.length > showN ? `<button class="more" id="more">${list.length - showN}건 더 보기</button>` : "");
+  $("sigList").querySelectorAll(".sig > button").forEach((b) => b.addEventListener("click", () => {
+    const el = b.parentElement, s = shown[+el.dataset.i], det = el.querySelector(".detail");
+    det.hidden = !det.hidden; b.setAttribute("aria-expanded", String(!det.hidden));
+    if (!det.hidden && !det.innerHTML) {
+      const n = s.path.length, at = (k) => n >= k ? `<b class="num ${cls(s.path[k - 1].r)}">${pct(s.path[k - 1].r)}</b>` : `<b>–</b>`;
+      det.innerHTML = retChart(Array.from({ length: Math.max(n, 5) }, (_, k) => k < n ? s.path[k].r : null), { w: Math.max(260, det.clientWidth || 560), h: 170 }) +
+        `<div class="kv"><div>1일 뒤${at(1)}</div><div>5일 뒤${at(5)}</div><div>20일 뒤${at(20)}</div><div>60일 뒤${at(60)}</div></div>` +
+        `<a class="out" href="https://m.stock.naver.com/domestic/stock/${s.code}/total" target="_blank" rel="noopener">네이버 증권에서 보기 →</a>`;
+    }
+  }));
+  const m = $("more"); if (m) m.addEventListener("click", () => { showN += 20; renderTrack(); });
+}
+
+function seg(id, key, cb) {
+  $(id).querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+    $(id).querySelectorAll("button").forEach((t) => t.classList.toggle("on", t === b)); cb(b.dataset[key]);
+  }));
+}
+seg("gradeSeg", "g", (v) => { gradeF = v; renderCards(); });
+seg("mktSeg", "m", (v) => { mkt = v; renderCards(); });
+seg("stSeg", "s", (v) => { st = v; showN = 12; renderTrack(); });
+$("date").addEventListener("change", (e) => loadDate(e.target.value));
+let rz, lastW = innerWidth;
+addEventListener("resize", () => { if (innerWidth === lastW) return; lastW = innerWidth; clearTimeout(rz); rz = setTimeout(() => { renderHero(); renderCards(); renderTrack(); }, 200); });
+
+async function loadDate(d) {
+  try { today = await getJSON(`data/${d}.json`); } catch { today = null; }
+  renderHero(); renderCards();
+  $("foot").innerHTML = today ? `업데이트 ${today.generated} KST${today.failed ? ` · 조회 실패 ${today.failed}종목 제외` : ""}<br>RSI(${today.period})는 Wilder 방식. 등급은 규모·유동성 기준의 참고용이고, 매수 추천이 아니에요.` : "";
+}
+(async () => {
+  try { tracking = await getJSON("data/tracking.json"); } catch {}
+  renderTrack();
+  let idx = [];
+  try { idx = await getJSON("data/index.json"); } catch {}
+  if (!idx.length) { renderHero(); $("headline").textContent = "첫 실행 후 여기에 결과가 나와요"; return; }
+  $("date").innerHTML = idx.map((e) => `<option value="${e.date}">${e.date} · ${e.count}종목</option>`).join("");
+  loadDate(idx[0].date);
+})();
+</script>
+</body>
+</html>
