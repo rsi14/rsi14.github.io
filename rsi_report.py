@@ -400,7 +400,8 @@ def backtest_summary(path="site/data/backtest.json"):
         return None
     rule = f"r14_{RSI_THRESHOLD:g}"
     groups = {"동반": ("d25+",), "부분": ("c10-25",), "단독": ("a<3", "b3-10")}
-    out = {"from": bt.get("from"), "to": bt.get("to"), "cost": bt.get("cost")}
+    years = [c["k"][5] for c in bt["cells"]]
+    out = {"from": min(years) + "0101" if years else bt.get("from"), "to": bt.get("to"), "cost": bt.get("cost")}
     for name, keys in groups.items():
         cells = [c for c in bt["cells"] if c["k"][0] == rule and c["k"][4] in keys]
         g = {f: sum(c[f] for c in cells) for f in ("n", "s5", "c5", "w5", "s20", "c20", "w20")}
