@@ -15,7 +15,9 @@ from email.mime.text import MIMEText
 import requests
 
 RSI_PERIOD = int(os.getenv("RSI_PERIOD", "14"))
-RSI_THRESHOLD = float(os.getenv("RSI_THRESHOLD", "10"))
+RSI_THRESHOLD = float(os.getenv("RSI_THRESHOLD", "20"))
+BREADTH_RSI = 30   # 시장 과매도 비율: RSI(14)가 이 값 이하인 종목 비율
+PANIC, PARTIAL = 25, 10  # 비율(%) 기준: 25↑ 시장 동반, 10~25 부분 동반, 10↓ 단독 하락
 KST = timezone(timedelta(hours=9))
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
@@ -119,11 +121,12 @@ def find_signals(rows, rsis):
         if rows[i - 1][1] and rows[i][1] / rows[i - 1][1] - 1 <= LIMIT_DOWN:  # 정리매매 등
             continue
         entry = rows[i][1]
-        path = [
-            {"d": rows[j][0], "c": rows[j][1], "r": round((rows[j][1] / entry - 1) * 100, 2)}
-            for j in range(i + 1, min(n, i + 1 + TRACK_DAYS))
-        ]
-        sigs.append({"date": rows[i][0], "entry": entry, "rsi": round(r, 2), "path": path})
+        js = range(i + 1, min(n, i + 1 + TRACK_DAYS))
+        sig = {"date": rows[i][0], "entry": entry, "rsi": round(r, 1),
+               "p": [round((rows[j][1] / entry - 1) * 100, 2) for j in js]}
+        if sig["p"]:
+            sig["ld"], sig["lc"] = rows[js[-1]][0], rows[js[-1]][1]
+        sigs.append(sig)
     return sigs
 
 
@@ -144,8 +147,13 @@ def scan_one(market, code, name):
         "market": market, "code": code, "name": name, "date": last_date,
         "close": last_close, "chg": chg, "rsi": rsi, "halted": halted, "signals": signals,
         "since": rows[max(WARMUP, len(rows) - BACKFILL_DAYS)][0] if len(rows) > WARMUP else last_date,
+        "tail": [(rows[k][0], rsis[k]) for k in range(max(0, len(rows) - 200), len(rows))],
     }
     if rsi <= RSI_THRESHOLD:
+        for k in range(len(rows) - 1, max(WARMUP, len(rows) - 60), -1):  # RSI 기준 아래로 들어온 날
+            if rsis[k] is not None and rsis[k - 1] is not None and rsis[k] <= RSI_THRESHOLD < rsis[k - 1]:
+                out["cross"] = rows[k][0]
+                break
         tail = rows[-90:]
         rt = rsis[-90:]
         out["spark"] = [round(c) for _, c, _ in tail]
@@ -279,7 +287,7 @@ def send_email(subject, text):
     return True
 
 
-def save_site_data(hits, base_date, scanned, failed, site_dir="site/data"):
+def save_site_data(hits, base_date, scanned, failed, extra=None, site_dir="site/data"):
     """웹페이지용: 날짜별 JSON 저장 + 날짜 목록(index.json) 갱신"""
     import json
     os.makedirs(site_dir, exist_ok=True)
@@ -288,8 +296,9 @@ def save_site_data(hits, base_date, scanned, failed, site_dir="site/data"):
         "date": d, "period": RSI_PERIOD, "threshold": RSI_THRESHOLD,
         "scanned": scanned, "failed": failed,
         "generated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
+        **(extra or {}),
         "items": sorted(
-            [{k: (round(v, 2) if isinstance(v, float) else v) for k, v in h.items() if k not in ("date", "signals", "halted", "since")} for h in hits],
+            [{k: (round(v, 2) if isinstance(v, float) else v) for k, v in h.items() if k not in ("date", "signals", "halted", "since", "tail")} for h in hits],
             key=lambda x: x["rsi"],
         ),
     }
@@ -307,11 +316,11 @@ def save_site_data(hits, base_date, scanned, failed, site_dir="site/data"):
         json.dump(idx, f, ensure_ascii=False)
 
 
-def update_tracking(results, site_dir="site/data"):
-    """신호별 이후 추이를 tracking.json에 누적 (기존 기록은 지우지 않음)"""
+def update_tracking(results, breadth, site_dir="site/data"):
+    """신호별 이후 추이를 signals.json에 누적 (백필 구간 밖의 기존 기록은 유지)"""
     import json
     os.makedirs(site_dir, exist_ok=True)
-    path = f"{site_dir}/tracking.json"
+    path = f"{site_dir}/signals.json"
     try:
         with open(path, encoding="utf-8") as f:
             book = {f"{s['code']}_{s['date']}": s for s in json.load(f)}
@@ -324,9 +333,11 @@ def update_tracking(results, site_dir="site/data"):
         for s in r["signals"]:
             key = f"{r['code']}_{s['date']}"
             old = book.get(key)
-            if old and len(old["path"]) > len(s["path"]):
+            if old and len(old["p"]) > len(s["p"]):
                 continue  # 이미 더 긴 기록이 있으면 유지
-            book[key] = {"code": r["code"], "name": r["name"], "market": r["market"], **s}
+            b = breadth.get(s["date"], old.get("b") if old else None)
+            book[key] = {"code": r["code"], "name": r["name"], "market": r["market"], **s,
+                         "b": round(b, 1) if b is not None else None}
     items = sorted(book.values(), key=lambda s: (s["date"], s["code"]), reverse=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(items, f, ensure_ascii=False, separators=(",", ":"))
@@ -336,7 +347,7 @@ def update_tracking(results, site_dir="site/data"):
 def horizon_stats(items, days=(1, 5, 20, 60)):
     out = []
     for k in days:
-        rets = [s["path"][k - 1]["r"] for s in items if len(s["path"]) >= k]
+        rets = [s["p"][k - 1] for s in items if len(s["p"]) >= k]
         if rets:
             out.append((k, len(rets), sum(rets) / len(rets), sum(r > 0 for r in rets) / len(rets) * 100))
     return out
@@ -348,17 +359,55 @@ def build_tracking_summary(items):
     lines = ["", "━━━━━━━━━━", f"📈 신호 이후 추이 (RSI {RSI_THRESHOLD:g} 이하 진입일 종가 대비)"]
     for k, n, avg, win in horizon_stats(items):
         lines.append(f"· D+{k}: 평균 {avg:+.1f}% | 상승 비율 {win:.0f}% (표본 {n})")
-    active = [s for s in items if len(s["path"]) < TRACK_DAYS][:15]
+    active = [s for s in items if len(s["p"]) < TRACK_DAYS][:15]
     if active:
         lines += ["", f"추적 중 (최근 {len(active)}건)"]
         for s in active:
             d = datetime.strptime(s["date"], "%Y%m%d").strftime("%m/%d")
-            if s["path"]:
-                last = s["path"][-1]
-                lines.append(f"· {s['name']} {d} 진입 → D+{len(s['path'])} {last['r']:+.1f}%")
+            if s["p"]:
+                lines.append(f"· {s['name']} {d} 진입 → D+{len(s['p'])} {s['p'][-1]:+.1f}%")
             else:
                 lines.append(f"· {s['name']} {d} 진입 → 오늘부터 추적")
     return "\n".join(lines)
+
+
+def market_breadth(results):
+    """날짜별 RSI(14) BREADTH_RSI 이하 종목 비율(%) — 종목 수가 충분한 날만"""
+    from collections import defaultdict
+    cnt = defaultdict(lambda: [0, 0])
+    for r in results:
+        for d, v in r["tail"]:
+            if v is not None:
+                cnt[d][1] += 1
+                cnt[d][0] += v <= BREADTH_RSI
+    need = int(os.getenv("BREADTH_MIN_N", "300"))
+    return {d: a / b * 100 for d, (a, b) in cnt.items() if b >= need}
+
+
+def drop_type(b):
+    if b is None:
+        return None
+    return "동반" if b >= PANIC else "부분" if b >= PARTIAL else "단독"
+
+
+def backtest_summary(path="site/data/backtest.json"):
+    """백테스트 결과에서 현재 기준(RSI 14, 임계값)의 하락 유형별 성과 요약"""
+    import json
+    try:
+        with open(path, encoding="utf-8") as f:
+            bt = json.load(f)
+    except Exception:
+        return None
+    rule = f"r14_{RSI_THRESHOLD:g}"
+    groups = {"동반": ("d25+",), "부분": ("c10-25",), "단독": ("a<3", "b3-10")}
+    out = {"from": bt.get("from"), "to": bt.get("to"), "cost": bt.get("cost")}
+    for name, keys in groups.items():
+        cells = [c for c in bt["cells"] if c["k"][0] == rule and c["k"][4] in keys]
+        g = {f: sum(c[f] for c in cells) for f in ("n", "s5", "c5", "w5", "s20", "c20", "w20")}
+        if g["c20"]:
+            out[name] = {"n": g["n"], "a5": round(g["s5"] / g["c5"], 1), "w5": round(g["w5"] / g["c5"] * 100),
+                         "a20": round(g["s20"] / g["c20"], 1), "w20": round(g["w20"] / g["c20"] * 100)}
+    return out
 
 
 def main():
@@ -386,24 +435,36 @@ def main():
 
     base_date = max(r["date"] for r in results)
     current = [r for r in results if r["date"] == base_date]
+    breadth = market_breadth(results)
+    today_b = breadth.get(base_date)
+    print(f"시장 과매도 비율(RSI {BREADTH_RSI}↓): {today_b}")
+
     hits = [r for r in current if r["rsi"] <= RSI_THRESHOLD and not r["halted"]]
     with ThreadPoolExecutor(max_workers=6) as ex:
         hits = list(ex.map(enrich, hits))
-    tracking = update_tracking(results)
-    for h in hits:  # 이 종목의 과거 신호 성과
-        past = [s for s in tracking if s["code"] == h["code"] and len(s["path"]) >= 5]
+    tracking = update_tracking(results, breadth)
+    for h in hits:
+        cb = breadth.get(h.get("cross"))
+        h["cb"] = round(cb, 1) if cb is not None else None
+        h["type"] = drop_type(cb)
+        past = [s for s in tracking if s["code"] == h["code"] and len(s["p"]) >= 5]  # 이 종목의 과거 신호 성과
         if past:
+            l20 = [s["p"][19] for s in past if len(s["p"]) >= 20]
             h["hist"] = {
                 "n": len(past),
-                "d5": round(sum(s["path"][4]["r"] for s in past) / len(past), 1),
-                "d20": round(sum(s["path"][19]["r"] for s in past if len(s["path"]) >= 20) /
-                             max(1, sum(len(s["path"]) >= 20 for s in past)), 1)
-                if any(len(s["path"]) >= 20 for s in past) else None,
+                "d5": round(sum(s["p"][4] for s in past) / len(past), 1),
+                "d20": round(sum(l20) / len(l20), 1) if l20 else None,
             }
 
     report = build_report(hits, base_date, len(current), failed) + build_tracking_summary(tracking)
     print(report)
-    save_site_data(hits, base_date, len(current), failed)
+    dates = sorted(breadth)[-120:]
+    save_site_data(hits, base_date, len(current), failed, extra={
+        "breadth": round(today_b, 1) if today_b is not None else None,
+        "bhist": [[d, round(breadth[d], 1)] for d in dates],
+        "panic": PANIC, "partial": PARTIAL, "brsi": BREADTH_RSI,
+        "bt": backtest_summary(),
+    })
 
     subject = f"[RSI 리포트] {datetime.now(KST):%Y-%m-%d} 국장 RSI {RSI_THRESHOLD:g} 이하 {len(hits)}종목"
     sent = False
