@@ -183,7 +183,6 @@
       <button class="on" data-g="ALL">전체</button>
       <button data-g="양호">양호</button>
       <button data-g="보통">보통</button>
-      <button data-g="NOBAD">주의 빼고</button>
     </div>
     <div class="seg" id="mktSeg" role="group" aria-label="시장">
       <button class="on" data-m="ALL">전체</button>
@@ -191,7 +190,7 @@
       <button data-m="KOSDAQ">코스닥</button>
     </div>
     <div class="sp"></div>
-    <div class="hint">하락 유형 = RSI 20 아래로 들어온 날의 시장 과매도 비율 (25%↑ 동반 · 10~25% 부분 · 10%↓ 단독)<br>등급: 양호 = 시총 1조↑·거래대금 50억↑ · 주의 = 위험표시·시총 1천억↓·거래대금 10억↓</div>
+    <div class="hint">하락 유형 = RSI 20 아래로 들어온 날의 시장 과매도 비율 (25%↑ 동반 · 10~25% 부분 · 10%↓ 단독)<br>등급: 양호 = 시총 1조↑·거래대금 50억↑ · 잡주(시총 1천억↓·거래대금 10억↓·1,000원↓·관리/투자주의/정리매매 등)는 제외</div>
   </div>
 
   <div class="cards" id="cards"></div>
@@ -328,7 +327,7 @@ function renderHero() {
     ? `시장 과매도 비율 <em>${b.toFixed(1)}%</em>`
     : `RSI ${today.threshold} 이하 ${items.length}종목`;
   $("subline").innerHTML = `전체 종목 중 RSI ${today.brsi || 30} 이하 비율이에요. ${panic}%를 넘으면 시장 전체가 같이 빠진 날이에요.<br>` +
-    `오늘 RSI ${today.threshold} 이하 <b>${items.length}종목</b>` +
+    `오늘 RSI ${today.threshold} 이하 <b>${items.length}종목</b>${today.raw != null && today.raw > items.length ? ` (잡주 ${today.raw - items.length}종목 제외)` : ""}` +
     (items.length ? ` · 시장 동반 ${cnt("동반")} · 부분 ${cnt("부분")} · 단독 ${cnt("단독")}` : "");
   const bt = today.bt;
   const cur = typeOf(b);
@@ -363,7 +362,7 @@ function renderGuide() {
     g.className = "guide";
     g.innerHTML = `<div class="eyebrow">오늘의 가이드</div>
       <h2>오늘은 쉬어가는 날이에요</h2>
-      <p>시장 과매도 비율이 ${b != null ? b.toFixed(1) + "%" : "–"}로 ${b != null && b < 10 ? "평온해요" : "패닉 수준이 아니에요"}. 지금 RSI ${today.threshold} 아래 종목들은 ${items.length ? "대부분 혼자 빠졌거나 규모가 작은 종목이에요" : "없어요"}. ${bt["단독"] ? `혼자 빠진 종목은 과거 20일 뒤 평균 <b class="${cls(bt["단독"].a20)}">${pct(bt["단독"].a20)}</b>(승률 ${bt["단독"].w20}%)였어요.` : ""}</p>
+      <p>시장 과매도 비율이 ${b != null ? b.toFixed(1) + "%" : "–"}로 ${b != null && b < 10 ? "평온해요" : "패닉 수준이 아니에요"}. 지금 RSI ${today.threshold} 아래 종목은 ${items.length ? items.length + "개 있지만 시장 전체가 같이 빠진 게 아니에요" : "잡주를 빼면 없어요"}. ${bt["단독"] ? `혼자 빠진 종목은 과거 20일 뒤 평균 <b class="${cls(bt["단독"].a20)}">${pct(bt["단독"].a20)}</b>(승률 ${bt["단독"].w20}%)였어요.` : ""}</p>
       <p class="how">시장 과매도 비율이 ${panic}%를 넘는 날 매수 후보가 나와요.${lastPanic ? ` 마지막으로 넘은 날: ${ymd(lastPanic)}` : ""}</p>`;
   }
 }
