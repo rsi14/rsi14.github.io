@@ -53,6 +53,8 @@ def list_stocks(market):
             code, name = s.get("itemCode"), s.get("stockName")
             if s.get("stockEndType") not in (None, "stock"):  # ETF·ETN 등 제외
                 continue
+            if not code or code[-1] != "0" or "스팩" in (name or ""):  # 우선주·스팩 제외
+                continue
             if code and name:
                 out.append((code, name))
         total = data.get("totalCount", 0)
