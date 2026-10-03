@@ -54,6 +54,18 @@
   .g-보통 { background: var(--midbg); color: var(--mid); }
   .g-주의 { background: var(--badbg); color: var(--bad); }
   .pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .t-동반 { background: var(--goodbg); color: var(--good); }
+  .t-부분 { background: var(--midbg); color: var(--mid); }
+  .t-단독 { background: var(--badbg); color: var(--up); }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 10px; }
+  .st-panic { background: var(--goodbg); color: var(--good); }
+  .st-warn { background: var(--midbg); color: var(--mid); }
+  .st-calm { background: var(--badbg); color: var(--bad); }
+  .bt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
+  .bt div { background: var(--bg); border-radius: 10px; padding: 8px 10px; font-size: 11px; color: var(--muted); }
+  .bt b { display: block; font-size: 15px; margin-top: 2px; }
+  .bt small { display: block; font-size: 11px; }
+  .bt .now { outline: 2px solid var(--line); outline-offset: -2px; }
 
   .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .bar .sp { flex: 1; }
@@ -88,6 +100,7 @@
   .metrics b { display: block; font-size: 13px; font-weight: 600; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .notes { display: grid; gap: 6px; font-size: 13px; color: var(--ink2); line-height: 1.5; }
   .notes .warn { color: var(--up); font-weight: 600; }
+  .notes .why { color: var(--ink2); }
   .notes .lbl { display: inline-block; font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; margin-right: 6px; }
   a.out { font-size: 13px; color: var(--down); text-decoration: none; font-weight: 500; justify-self: start; }
 
@@ -135,17 +148,24 @@
 
   <section class="hero" aria-live="polite">
     <div>
+      <div id="status"></div>
       <h1 id="headline">불러오는 중…</h1>
       <p id="subline"></p>
-      <div class="gradeSum" id="gradeSum"></div>
+      <div class="bt" id="btBox"></div>
     </div>
     <div class="heroChart">
-      <div class="cap">지난 신호 평균 수익률 (신호일 종가 대비)</div>
+      <div class="cap" id="heroCap">시장 과매도 비율 추이</div>
       <div id="heroChart"></div>
     </div>
   </section>
 
   <div class="bar">
+    <div class="seg" id="typeSeg" role="group" aria-label="하락 유형">
+      <button class="on" data-t="ALL">전체</button>
+      <button data-t="동반">시장 동반</button>
+      <button data-t="부분">부분 동반</button>
+      <button data-t="단독">단독 하락</button>
+    </div>
     <div class="seg" id="gradeSeg" role="group" aria-label="등급">
       <button class="on" data-g="ALL">전체</button>
       <button data-g="양호">양호</button>
@@ -158,17 +178,23 @@
       <button data-m="KOSDAQ">코스닥</button>
     </div>
     <div class="sp"></div>
-    <div class="hint">양호 = 시총 1조↑·거래대금 50억↑ · 주의 = 위험표시·시총 1천억↓·거래대금 10억↓</div>
+    <div class="hint">하락 유형 = RSI 20 아래로 들어온 날의 시장 과매도 비율 (25%↑ 동반 · 10~25% 부분 · 10%↓ 단독)<br>등급: 양호 = 시총 1조↑·거래대금 50억↑ · 주의 = 위험표시·시총 1천억↓·거래대금 10억↓</div>
   </div>
 
   <div class="cards" id="cards"></div>
 
   <section class="sec">
     <h2>지난 신호, 지금은?</h2>
-    <p>RSI가 10 아래로 떨어진 날 종가를 기준으로, 이후 60거래일 동안의 수익률</p>
+    <p>RSI가 20 아래로 떨어진 날 종가를 기준으로, 이후 60거래일 동안의 수익률 (최근 약 6개월 신호)</p>
     <div class="stats" id="hStats"></div>
     <div class="panel pad" style="margin-top:10px"><div id="avgChart"></div></div>
     <div class="bar" style="margin:12px 0 10px">
+      <div class="seg" id="sigTypeSeg" role="group" aria-label="하락 유형">
+        <button class="on" data-t="ALL">전체</button>
+        <button data-t="동반">시장 동반</button>
+        <button data-t="부분">부분</button>
+        <button data-t="단독">단독</button>
+      </div>
       <div class="seg" id="stSeg" role="group" aria-label="추적 상태">
         <button class="on" data-s="ALL">전체</button>
         <button data-s="ACTIVE">추적 중</button>
@@ -189,8 +215,11 @@ const cls = (v) => (v < 0 ? "neg" : v > 0 ? "pos" : "");
 const ymd = (s) => `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6)}`;
 const eok = (v) => v == null ? "–" : v >= 10000 ? (v / 10000).toFixed(v >= 100000 ? 0 : 1) + "조" : fmt(Math.round(v)) + "억";
 const ORDER = { "양호": 0, "보통": 1, "주의": 2 };
+const TORDER = { "동반": 0, "부분": 1, "단독": 2 };
+const TLABEL = { "동반": "시장 동반", "부분": "부분 동반", "단독": "단독 하락" };
+const typeOf = (b) => b == null ? null : b >= 25 ? "동반" : b >= 10 ? "부분" : "단독";
 const TRACK_DAYS = 60;
-let today = null, tracking = [], gradeF = "ALL", mkt = "ALL", st = "ALL", showN = 12;
+let today = null, tracking = [], gradeF = "ALL", mkt = "ALL", st = "ALL", showN = 12, typeF = "ALL", sigT = "ALL";
 
 async function getJSON(p) { const r = await fetch(p + "?t=" + Date.now()); if (!r.ok) throw 0; return r.json(); }
 
@@ -232,8 +261,30 @@ function priceChart(s, low, w) {
     <text x="${pad[3]}" y="${h - 3}" font-size="10" fill="var(--muted)">90거래일 전</text>
     <text x="${w - pad[1]}" y="${h - 3}" font-size="10" text-anchor="end" fill="var(--muted)">최근</text></svg>`;
 }
+function breadthChart(hist, w, panic, partial) {
+  if (!hist || !hist.length) return `<div class="hint" style="padding:24px 0;text-align:center">아직 데이터가 없어요</div>`;
+  const h = 150, pad = [10, 34, 20, 30];
+  const v = hist.map((x) => x[1]), hi = Math.max(panic + 10, ...v);
+  const X = (i) => pad[3] + (i / Math.max(1, v.length - 1)) * (w - pad[1] - pad[3]);
+  const Y = (x) => pad[0] + (1 - x / hi) * (h - pad[0] - pad[2]);
+  const d = v.map((x, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(x).toFixed(1)}`).join("");
+  const last = v[v.length - 1], col = last >= panic ? "var(--good)" : last >= partial ? "var(--mid)" : "var(--muted)";
+  const md = (s) => `${s.slice(4, 6)}/${s.slice(6)}`;
+  const dots = v.map((x, i) => x >= panic ? `<circle cx="${X(i)}" cy="${Y(x)}" r="2.5" fill="var(--good)"/>` : "").join("");
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:block;max-width:100%" role="img" aria-label="시장 과매도 비율 추이">
+    <rect x="${pad[3]}" y="${Y(hi)}" width="${w - pad[1] - pad[3]}" height="${Y(panic) - Y(hi)}" fill="var(--good)" opacity=".07"/>
+    <line x1="${pad[3]}" x2="${w - pad[1]}" y1="${Y(panic)}" y2="${Y(panic)}" stroke="var(--good)" stroke-dasharray="4 3"/>
+    <line x1="${pad[3]}" x2="${w - pad[1]}" y1="${Y(partial)}" y2="${Y(partial)}" stroke="var(--grid)"/>
+    <line x1="${pad[3]}" x2="${w - pad[1]}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--grid)"/>
+    <text x="${w - pad[1] + 4}" y="${Y(panic) + 4}" font-size="10" fill="var(--good)" font-family="var(--mono)">${panic}%</text>
+    <text x="${w - pad[1] + 4}" y="${Y(partial) + 4}" font-size="10" fill="var(--muted)" font-family="var(--mono)">${partial}%</text>
+    <path d="${d}" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-linejoin="round"/>${dots}
+    <circle cx="${X(v.length - 1)}" cy="${Y(last)}" r="4" fill="${col}"/>
+    <text x="${pad[3]}" y="${h - 4}" font-size="10" fill="var(--muted)">${md(hist[0][0])}</text>
+    <text x="${w - pad[1]}" y="${h - 4}" font-size="10" text-anchor="end" fill="var(--muted)">${md(hist[hist.length - 1][0])}</text></svg>`;
+}
 function sparkRet(path) {
-  const v = path.map((p) => p.r), w = 100, h = 30, lo = Math.min(0, ...v), hi = Math.max(0, ...v), sp = hi - lo || 1;
+  const v = path, w = 100, h = 30, lo = Math.min(0, ...v), hi = Math.max(0, ...v), sp = hi - lo || 1;
   const X = (i) => 2 + i / (v.length - 1) * (w - 4), Y = (x) => 3 + (1 - (x - lo) / sp) * (h - 6);
   const col = v[v.length - 1] < 0 ? "var(--down)" : "var(--up)";
   return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:block;max-width:100%" aria-hidden="true">
@@ -242,38 +293,44 @@ function sparkRet(path) {
 }
 
 function avgAt(list, k) {
-  const r = list.filter((s) => s.path.length >= k).map((s) => s.path[k - 1].r);
+  const r = list.filter((s) => s.p.length >= k).map((s) => s.p[k - 1]);
   return r.length ? { avg: r.reduce((a, b) => a + b, 0) / r.length, win: r.filter((v) => v > 0).length / r.length * 100, n: r.length } : null;
 }
 function avgPath(list) { return Array.from({ length: TRACK_DAYS }, (_, k) => { const a = avgAt(list, k + 1); return a ? a.avg : null; }); }
 
 function renderHero() {
-  const items = today ? today.items : [];
-  const by = (g) => items.filter((x) => x.grade === g).length;
-  $("basis").textContent = today ? `${today.date} 종가 기준 · ${fmt(today.scanned)}종목 스캔` : "";
-  if (today) $("headline").innerHTML = items.length
-    ? `오늘 <em>${items.length}종목</em>이 RSI ${today.threshold} 아래로 떨어졌어요`
-    : `오늘은 RSI ${today.threshold} 아래 종목이 없어요`;
-  const d5 = avgAt(tracking, 5), d20 = avgAt(tracking, 20);
-  $("subline").innerHTML = d5
-    ? `지난 신호 ${tracking.length}건은 평균 5일 뒤 <b class="${cls(d5.avg)}">${pct(d5.avg)}</b>` +
-      (d20 ? `, 20일 뒤 <b class="${cls(d20.avg)}">${pct(d20.avg)}</b>` : "") + `. 5일 뒤 오른 비율은 ${d5.win.toFixed(0)}%예요.`
-    : "지난 신호 기록이 쌓이면 여기서 평균 성과를 보여줘요.";
-  $("gradeSum").innerHTML = ["양호", "보통", "주의"].filter(by).map((g) => `<span class="pill g-${g}"><i></i>${g} ${by(g)}</span>`).join("");
-  $("heroChart").innerHTML = retChart(avgPath(tracking), { w: Math.max(260, $("heroChart").clientWidth || 340), h: 150, compact: true });
+  if (!today) return;
+  const items = today.items, b = today.breadth, panic = today.panic || 25, partial = today.partial || 10;
+  const cnt = (t) => items.filter((x) => x.type === t).length;
+  $("basis").textContent = `${today.date} 종가 기준 · ${fmt(today.scanned)}종목 스캔`;
+  const stt = b == null ? null : b >= panic ? ["st-panic", "시장 패닉"] : b >= partial ? ["st-warn", "약한 동반 하락"] : ["st-calm", "평온한 시장"];
+  $("status").innerHTML = stt ? `<span class="status ${stt[0]}">● ${stt[1]}</span>` : "";
+  $("headline").innerHTML = b != null
+    ? `시장 과매도 비율 <em>${b.toFixed(1)}%</em>`
+    : `RSI ${today.threshold} 이하 ${items.length}종목`;
+  $("subline").innerHTML = `전체 종목 중 RSI ${today.brsi || 30} 이하 비율이에요. ${panic}%를 넘으면 시장 전체가 같이 빠진 날이에요.<br>` +
+    `오늘 RSI ${today.threshold} 이하 <b>${items.length}종목</b>` +
+    (items.length ? ` · 시장 동반 ${cnt("동반")} · 부분 ${cnt("부분")} · 단독 ${cnt("단독")}` : "");
+  const bt = today.bt;
+  const cur = typeOf(b);
+  $("btBox").innerHTML = bt ? ["동반", "부분", "단독"].filter((t) => bt[t]).map((t) =>
+    `<div class="${t === cur ? "now" : ""}">과거 ${TLABEL[t]}<b class="num ${cls(bt[t].a20)}">${pct(bt[t].a20)}</b><small>20일 뒤 · 승률 ${bt[t].w20}% · ${fmt(bt[t].n)}건</small></div>`).join("") : "";
+  $("heroCap").textContent = `시장 과매도 비율 추이 (최근 ${today.bhist ? today.bhist.length : 0}거래일, ● = ${panic}% 이상)`;
+  $("heroChart").innerHTML = breadthChart(today.bhist, Math.max(260, $("heroChart").clientWidth || 340), panic, partial);
 }
 
 function renderCards() {
   if (!today) { $("cards").innerHTML = ""; return; }
   const items = today.items.filter((x) => (mkt === "ALL" || x.market === mkt) &&
+    (typeF === "ALL" || x.type === typeF) &&
     (gradeF === "ALL" || (gradeF === "NOBAD" ? x.grade !== "주의" : x.grade === gradeF)))
-    .sort((a, b) => (ORDER[a.grade] ?? 1) - (ORDER[b.grade] ?? 1) || a.rsi - b.rsi);
+    .sort((a, b) => (TORDER[a.type] ?? 3) - (TORDER[b.type] ?? 3) || (ORDER[a.grade] ?? 1) - (ORDER[b.grade] ?? 1) || a.rsi - b.rsi);
   if (!items.length) { $("cards").innerHTML = `<div class="empty">조건에 맞는 종목이 없어요</div>`; return; }
   $("cards").innerHTML = items.map((x) => `
     <article class="card ${x.grade === "주의" ? "dim" : ""}" data-code="${x.code}">
       <div class="head">
         <div class="who">
-          <div class="nm">${x.name}<span class="pill g-${x.grade || "보통"}"><i></i>${x.grade || "–"}</span></div>
+          <div class="nm">${x.name}${x.type ? `<span class="pill t-${x.type}">${TLABEL[x.type]}</span>` : ""}<span class="pill g-${x.grade || "보통"}"><i></i>${x.grade || "–"}</span></div>
           <div class="sub">${x.market === "KOSPI" ? "코스피" : "코스닥"} · ${x.code}</div>
         </div>
         <div class="px"><div class="p num">${fmt(Math.round(x.close))}원</div><div class="c num ${cls(x.chg)}">${pct(x.chg)}</div></div>
@@ -290,9 +347,10 @@ function renderCards() {
         <div><span>52주 고점 대비</span><b class="num neg">${x.from_high != null ? pct(x.from_high) : "–"}</b></div>
       </div>
       <div class="notes">
+        ${x.cross ? `<div class="why"><span class="lbl">하락 유형</span>${ymd(x.cross)}에 RSI ${today.threshold} 아래로 진입 · 그날 시장 과매도 ${x.cb != null ? x.cb.toFixed(1) + "%" : "–"}</div>` : ""}
         ${x.flags && x.flags.length ? `<div class="warn">⚠ ${x.flags.join(", ")}</div>` : ""}
         ${x.news ? `<div><span class="lbl">최근 뉴스</span>${x.news}</div>` : ""}
-        ${x.hist ? `<div><span class="lbl">이 종목 과거</span>RSI 10 이하 ${x.hist.n}회 · 5일 뒤 평균 <b class="${cls(x.hist.d5)}">${pct(x.hist.d5)}</b>${x.hist.d20 != null ? ` · 20일 뒤 <b class="${cls(x.hist.d20)}">${pct(x.hist.d20)}</b>` : ""}</div>`
+        ${x.hist ? `<div><span class="lbl">이 종목 과거</span>RSI ${today.threshold} 이하 진입 ${x.hist.n}회 · 5일 뒤 평균 <b class="${cls(x.hist.d5)}">${pct(x.hist.d5)}</b>${x.hist.d20 != null ? ` · 20일 뒤 <b class="${cls(x.hist.d20)}">${pct(x.hist.d20)}</b>` : ""}</div>`
                  : `<div><span class="lbl">이 종목 과거</span>기록상 첫 신호</div>`}
       </div>
       <a class="out" href="https://m.stock.naver.com/domestic/stock/${x.code}/total" target="_blank" rel="noopener">네이버 증권에서 차트·뉴스 보기 →</a>
@@ -304,7 +362,8 @@ function renderCards() {
 }
 
 function renderTrack() {
-  const list = tracking.filter((s) => st === "ALL" || (st === "ACTIVE" ? s.path.length < TRACK_DAYS : s.path.length >= TRACK_DAYS));
+  const list = tracking.filter((s) => (st === "ALL" || (st === "ACTIVE" ? s.p.length < TRACK_DAYS : s.p.length >= TRACK_DAYS)) &&
+    (sigT === "ALL" || typeOf(s.b) === sigT));
   $("hStats").innerHTML = [1, 5, 20, 60].map((k) => {
     const a = avgAt(list, k);
     return a ? `<div class="stat"><div class="v num ${cls(a.avg)}">${pct(a.avg)}</div><div class="k">${k}일 뒤 평균</div><div class="s">오른 비율 ${a.win.toFixed(0)}% · ${a.n}건</div></div>`
@@ -314,19 +373,19 @@ function renderTrack() {
   if (!list.length) { $("sigList").innerHTML = `<div class="empty" style="border:0">해당하는 신호가 없어요</div>`; return; }
   const shown = list.slice(0, showN);
   $("sigList").innerHTML = shown.map((s, i) => {
-    const n = s.path.length, last = n ? s.path[n - 1] : null;
+    const n = s.p.length, last = n ? s.p[n - 1] : null, t = typeOf(s.b);
     return `<div class="sig" data-i="${i}"><button aria-expanded="false">
-      <div style="min-width:0"><div class="nm">${s.name}</div><div class="sub">${ymd(s.date)} 신호 · 그날 종가 ${fmt(Math.round(s.entry))}원</div></div>
-      <div>${n > 1 ? sparkRet(s.path) : ""}</div>
-      <div class="ret num ${last ? cls(last.r) : ""}">${last ? pct(last.r) : "–"}<small>${n ? (n >= TRACK_DAYS ? "60일 완료" : `${n}일째`) : "내일부터"}</small></div>
+      <div style="min-width:0"><div class="nm">${s.name}${t ? ` <span class="pill t-${t}" style="font-size:11px;padding:1px 7px">${TLABEL[t]}</span>` : ""}</div><div class="sub">${ymd(s.date)} 신호 · 그날 종가 ${fmt(Math.round(s.entry))}원${s.b != null ? ` · 시장 과매도 ${s.b}%` : ""}</div></div>
+      <div>${n > 1 ? sparkRet(s.p) : ""}</div>
+      <div class="ret num ${last != null ? cls(last) : ""}">${last != null ? pct(last) : "–"}<small>${n ? (n >= TRACK_DAYS ? "60일 완료" : `${n}일째`) : "내일부터"}</small></div>
     </button><div class="detail" hidden></div></div>`;
   }).join("") + (list.length > showN ? `<button class="more" id="more">${list.length - showN}건 더 보기</button>` : "");
   $("sigList").querySelectorAll(".sig > button").forEach((b) => b.addEventListener("click", () => {
     const el = b.parentElement, s = shown[+el.dataset.i], det = el.querySelector(".detail");
     det.hidden = !det.hidden; b.setAttribute("aria-expanded", String(!det.hidden));
     if (!det.hidden && !det.innerHTML) {
-      const n = s.path.length, at = (k) => n >= k ? `<b class="num ${cls(s.path[k - 1].r)}">${pct(s.path[k - 1].r)}</b>` : `<b>–</b>`;
-      det.innerHTML = retChart(Array.from({ length: Math.max(n, 5) }, (_, k) => k < n ? s.path[k].r : null), { w: Math.max(260, det.clientWidth || 560), h: 170 }) +
+      const n = s.p.length, at = (k) => n >= k ? `<b class="num ${cls(s.p[k - 1])}">${pct(s.p[k - 1])}</b>` : `<b>–</b>`;
+      det.innerHTML = retChart(Array.from({ length: Math.max(n, 5) }, (_, k) => k < n ? s.p[k] : null), { w: Math.max(260, det.clientWidth || 560), h: 170 }) +
         `<div class="kv"><div>1일 뒤${at(1)}</div><div>5일 뒤${at(5)}</div><div>20일 뒤${at(20)}</div><div>60일 뒤${at(60)}</div></div>` +
         `<a class="out" href="https://m.stock.naver.com/domestic/stock/${s.code}/total" target="_blank" rel="noopener">네이버 증권에서 보기 →</a>`;
     }
@@ -342,6 +401,8 @@ function seg(id, key, cb) {
 seg("gradeSeg", "g", (v) => { gradeF = v; renderCards(); });
 seg("mktSeg", "m", (v) => { mkt = v; renderCards(); });
 seg("stSeg", "s", (v) => { st = v; showN = 12; renderTrack(); });
+seg("typeSeg", "t", (v) => { typeF = v; renderCards(); });
+seg("sigTypeSeg", "t", (v) => { sigT = v; showN = 12; renderTrack(); });
 $("date").addEventListener("change", (e) => loadDate(e.target.value));
 let rz, lastW = innerWidth;
 addEventListener("resize", () => { if (innerWidth === lastW) return; lastW = innerWidth; clearTimeout(rz); rz = setTimeout(() => { renderHero(); renderCards(); renderTrack(); }, 200); });
@@ -349,10 +410,10 @@ addEventListener("resize", () => { if (innerWidth === lastW) return; lastW = inn
 async function loadDate(d) {
   try { today = await getJSON(`data/${d}.json`); } catch { today = null; }
   renderHero(); renderCards();
-  $("foot").innerHTML = today ? `업데이트 ${today.generated} KST${today.failed ? ` · 조회 실패 ${today.failed}종목 제외` : ""}<br>RSI(${today.period})는 Wilder 방식. 등급은 규모·유동성 기준의 참고용이고, 매수 추천이 아니에요.` : "";
+  $("foot").innerHTML = today ? `업데이트 ${today.generated} KST${today.failed ? ` · 조회 실패 ${today.failed}종목 제외` : ""}<br>RSI(${today.period})는 Wilder 방식. 과거 성과는 ${today.bt ? today.bt.from.slice(0, 4) + "~" + today.bt.to.slice(0, 4) + "년 " : ""}백테스트(다음 날 시가 매수, 비용 0.3% 차감, 현재 상장 종목 기준)이고, 미래 수익을 보장하지 않아요.` : "";
 }
 (async () => {
-  try { tracking = await getJSON("data/tracking.json"); } catch {}
+  try { tracking = await getJSON("data/signals.json"); } catch {}
   renderTrack();
   let idx = [];
   try { idx = await getJSON("data/index.json"); } catch {}
