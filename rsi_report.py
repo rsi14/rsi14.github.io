@@ -105,6 +105,7 @@ def wilder_rsi(closes, period=14):
 TRACK_DAYS = int(os.getenv("TRACK_DAYS", "60"))      # 신호 후 추적 거래일 수
 BACKFILL_DAYS = int(os.getenv("BACKFILL_DAYS", "120"))  # 과거 신호 자동 탐색 범위(거래일)
 WARMUP = 60  # RSI 안정화용 최소 데이터 길이
+LIMIT_DOWN = -0.305  # 하루 -30% 초과 하락 = 가격제한폭 밖(정리매매 등)
 
 
 def find_signals(rows, rsis):
@@ -114,6 +115,8 @@ def find_signals(rows, rsis):
     for i in range(max(WARMUP, n - BACKFILL_DAYS), n):
         r, prev = rsis[i], rsis[i - 1]
         if r is None or prev is None or not (r <= RSI_THRESHOLD < prev):
+            continue
+        if rows[i - 1][1] and rows[i][1] / rows[i - 1][1] - 1 <= LIMIT_DOWN:  # 정리매매 등
             continue
         entry = rows[i][1]
         path = [
@@ -140,6 +143,7 @@ def scan_one(market, code, name):
     out = {
         "market": market, "code": code, "name": name, "date": last_date,
         "close": last_close, "chg": chg, "rsi": rsi, "halted": halted, "signals": signals,
+        "since": rows[max(WARMUP, len(rows) - BACKFILL_DAYS)][0] if len(rows) > WARMUP else last_date,
     }
     if rsi <= RSI_THRESHOLD:
         tail = rows[-90:]
@@ -194,15 +198,20 @@ def enrich(hit):
             flags.append(word)
     if hit.get("halted") and "거래정지" not in flags:
         flags.append("거래정지")
+    if hit["chg"] / 100 <= LIMIT_DOWN and "정리매매" not in flags:
+        flags.append("정리매매 의심(하루 -30% 초과)")
     hit["flags"] = flags
-    news = safe_json(f"https://m.stock.naver.com/api/news/stock/{code}", {"pageSize": 3, "page": 1})
+    news = safe_json(f"https://m.stock.naver.com/api/news/stock/{code}", {"pageSize": 10, "page": 1})
     try:
-        items = news if isinstance(news, list) else (news or {}).get("items", [])
-        first = items[0]
-        first = first.get("items", [first])[0] if isinstance(first, dict) and "items" in first else first
-        title = re.sub(r"<[^>]+>", "", first.get("title") or first.get("titleFull") or "")
-        if title:
-            hit["news"] = title.strip()
+        raw = news if isinstance(news, list) else (news or {}).get("items", [])
+        cands = []
+        for it in raw:
+            cands.extend(it.get("items") or [] if isinstance(it, dict) and "items" in it else [it])
+        titles = [re.sub(r"<[^>]+>", "", c.get("title") or c.get("titleFull") or "").strip()
+                  for c in cands if isinstance(c, dict)]
+        related = [t for t in titles if hit["name"] in t]  # 종목명이 들어간 기사만
+        if related:
+            hit["news"] = related[0]
     except Exception:
         pass
     hit["grade"] = grade(hit)
@@ -280,7 +289,7 @@ def save_site_data(hits, base_date, scanned, failed, site_dir="site/data"):
         "scanned": scanned, "failed": failed,
         "generated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
         "items": sorted(
-            [{k: (round(v, 2) if isinstance(v, float) else v) for k, v in h.items() if k not in ("date", "signals", "halted")} for h in hits],
+            [{k: (round(v, 2) if isinstance(v, float) else v) for k, v in h.items() if k not in ("date", "signals", "halted", "since")} for h in hits],
             key=lambda x: x["rsi"],
         ),
     }
@@ -309,6 +318,9 @@ def update_tracking(results, site_dir="site/data"):
     except Exception:
         book = {}
     for r in results:
+        fresh = {f"{r['code']}_{s['date']}" for s in r["signals"]}
+        for k in [k for k, v in book.items() if v["code"] == r["code"] and v["date"] >= r["since"] and k not in fresh]:
+            del book[k]
         for s in r["signals"]:
             key = f"{r['code']}_{s['date']}"
             old = book.get(key)
