@@ -235,7 +235,8 @@ const clean = (x) => x.grade !== "주의" && !(x.flags && x.flags.length);
 const pickScore = (x) => x.type === "동반" && clean(x) ? (x.grade === "양호" ? 1000 : 0) + Math.min(x.tv20 || 0, 500) + (20 - x.rsi) : null;
 const isWatch = (x) => x.type === "부분" && x.grade === "양호" && clean(x);
 const josa = (w, a, b) => { const c = (w || "").trim().slice(-1).charCodeAt(0); return c >= 0xAC00 && c <= 0xD7A3 ? ((c - 0xAC00) % 28 ? a : b) : a + "(" + b + ")"; };
-const rankOf = (x) => pickScore(x) != null ? 0 : isWatch(x) ? 1 : 2;
+const isLarge = (x) => x.lg && clean(x);
+const rankOf = (x) => pickScore(x) != null ? 0 : isLarge(x) ? 1 : isWatch(x) ? 2 : 3;
 const TRACK_DAYS = 60;
 let today = null, tracking = [], gradeF = "ALL", mkt = "ALL", st = "ALL", showN = 12, typeF = "ALL", sigT = "ALL";
 
@@ -344,14 +345,16 @@ function renderGuide() {
   const picks = items.filter((x) => pickScore(x) != null).sort((a, c) => pickScore(c) - pickScore(a));
   const watch = items.filter(isWatch);
   const link = (x) => `<a href="#card-${x.code}">${x.name}</a>`;
-  const top = picks.slice(0, 3);
+  const top = picks.slice(0, 3), large = items.filter(isLarge).sort((a, c) => c.tv20 - a.tv20);
+  const names = (arr, j) => arr.slice(0, 3).map(link).join(", ") + (arr.length > 3 ? ` 외 ${arr.length - 3}종목${j[0]}` : josa(arr.slice(0, 3).pop().name, j[0], j[1]));
+  const lg = large.length ? `<p><b>대형주 눌림</b> · ${names(large, ["을", "를"])} 사볼까요? 거래대금 200억↑ 종목이 RSI 25 아래로 들어왔어요. <b>매도: RSI 50 회복 시</b> (평균 16거래일). 과거 평균 <b class="pos">+4.3%</b>(승률 65%), 2021~2026년 매년 플러스였어요.</p>` : "";
   const lastPanic = (today.bhist || []).filter((h) => h[1] >= panic).map((h) => h[0]).pop();
   const stat = (t) => bt[t] ? `과거 같은 조건은 5일 뒤 평균 <b class="${cls(bt[t].a5)}">${pct(bt[t].a5)}</b>(승률 ${bt[t].w5}%), 20일 뒤 <b class="${cls(bt[t].a20)}">${pct(bt[t].a20)}</b>(승률 ${bt[t].w20}%)였어요.` : "";
-  if (top.length) {
+  if (top.length || large.length) {
     g.className = "guide go";
-    g.innerHTML = `<div class="eyebrow">오늘의 가이드 · 매수 후보 ${picks.length}종목</div>
-      <h2>${top.map(link).join(", ")}${picks.length > 3 ? ` 외 ${picks.length - 3}종목을` : josa(top[top.length - 1].name, "을", "를")} 사볼까요?</h2>
-      <p>시장 전체가 같이 빠진 날(과매도 비율 ${b != null ? b.toFixed(1) + "%" : "–"}) 함께 떨어진, 규모와 거래가 받쳐주는 종목이에요. ${stat("동반")}</p>
+    g.innerHTML = `<div class="eyebrow">오늘의 가이드 · 매수 후보 ${picks.length + large.length}종목</div>
+      <h2>${names(top.length ? top : large, ["을", "를"])} 사볼까요?</h2>
+      ${top.length ? `<p><b>시장 패닉</b> · 시장 전체가 같이 빠진 날(과매도 비율 ${b != null ? b.toFixed(1) + "%" : "–"}) 함께 떨어진 종목이에요. <b>매도: 5거래일 뒤</b>. ${bt["동반"] ? `과거 5일 뒤 평균 <b class="${cls(bt["동반"].a5)}">${pct(bt["동반"].a5)}</b>(승률 ${bt["동반"].w5}%), 매년 플러스였어요.` : ""}</p>` : ""}${lg}
       <p class="how">백테스트 방식: 다음 날 시가 매수 · 비용 0.3% 차감. 한 번에 다 사기보다 나눠서 들어가는 걸 기준으로 보세요.${watch.length ? ` 관찰 종목: ${watch.slice(0, 3).map(link).join(", ")}` : ""}</p>`;
   } else if (watch.length) {
     g.className = "guide";
@@ -376,10 +379,10 @@ function renderCards() {
       (TORDER[a.type] ?? 3) - (TORDER[b.type] ?? 3) || (ORDER[a.grade] ?? 1) - (ORDER[b.grade] ?? 1) || a.rsi - b.rsi);
   if (!items.length) { $("cards").innerHTML = `<div class="empty">조건에 맞는 종목이 없어요</div>`; return; }
   $("cards").innerHTML = items.map((x) => `
-    <article class="card ${pickScore(x) != null ? "pick" : x.grade === "주의" ? "dim" : ""}" id="card-${x.code}" data-code="${x.code}">
+    <article class="card ${pickScore(x) != null || isLarge(x) ? "pick" : x.grade === "주의" ? "dim" : ""}" id="card-${x.code}" data-code="${x.code}">
       <div class="head">
         <div class="who">
-          <div class="nm">${x.name}${pickScore(x) != null ? `<span class="pill pick-tag">매수 후보</span>` : isWatch(x) ? `<span class="pill watch-tag">관찰</span>` : ""}${x.type ? `<span class="pill t-${x.type}">${TLABEL[x.type]}</span>` : ""}<span class="pill g-${x.grade || "보통"}"><i></i>${x.grade || "–"}</span></div>
+          <div class="nm">${x.name}${pickScore(x) != null ? `<span class="pill pick-tag">매수 후보 · 5일 보유</span>` : isLarge(x) ? `<span class="pill pick-tag">대형주 눌림 · RSI 50 매도</span>` : isWatch(x) ? `<span class="pill watch-tag">관찰</span>` : ""}${x.type ? `<span class="pill t-${x.type}">${TLABEL[x.type]}</span>` : ""}<span class="pill g-${x.grade || "보통"}"><i></i>${x.grade || "–"}</span></div>
           <div class="sub">${x.market === "KOSPI" ? "코스피" : "코스닥"} · ${x.code}</div>
         </div>
         <div class="px"><div class="p num">${fmt(Math.round(x.close))}원</div><div class="c num ${cls(x.chg)}">${pct(x.chg)}</div></div>
