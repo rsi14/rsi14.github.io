@@ -160,7 +160,10 @@ def scan_one(market, code, name):
         "since": rows[max(WARMUP, len(rows) - BACKFILL_DAYS)][0] if len(rows) > WARMUP else last_date,
         "tail": [(rows[k][0], rsis[k]) for k in range(max(0, len(rows) - 200), len(rows))],
     }
-    if rsi <= RSI_THRESHOLD:
+    out["tv20"] = round(tv20_at(rows, len(rows) - 1), 1)  # 20일 평균 거래대금(억원)
+    out["lg"] = out["tv20"] >= 200 and any(  # 대형주 눌림: 최근 2거래일 내 RSI 25 아래로 진입
+        rsis[k] is not None and rsis[k - 1] is not None and rsis[k] <= 25 < rsis[k - 1] for k in (len(rows) - 2, len(rows) - 1))
+    if rsi <= RSI_THRESHOLD or out["lg"]:
         for k in range(len(rows) - 1, max(WARMUP, len(rows) - 60), -1):  # RSI 기준 아래로 들어온 날
             if rsis[k] is not None and rsis[k - 1] is not None and rsis[k] <= RSI_THRESHOLD < rsis[k - 1]:
                 out["cross"] = rows[k][0]
@@ -169,7 +172,6 @@ def scan_one(market, code, name):
         rt = rsis[-90:]
         out["spark"] = [round(c) for _, c, _ in tail]
         out["low"] = [i for i, v in enumerate(rt) if v is not None and v <= RSI_THRESHOLD]
-        out["tv20"] = round(tv20_at(rows, len(rows) - 1), 1)  # 20일 평균 거래대금(억원)
         hi52 = max(c for _, c, _ in rows[-250:])
         out["from_high"] = round((last_close / hi52 - 1) * 100, 1)
     return out
@@ -450,7 +452,7 @@ def main():
     today_b = breadth.get(base_date)
     print(f"시장 과매도 비율(RSI {BREADTH_RSI}↓): {today_b}")
 
-    hits = [r for r in current if r["rsi"] <= RSI_THRESHOLD and not r["halted"]]
+    hits = [r for r in current if (r["rsi"] <= RSI_THRESHOLD or r["lg"]) and not r["halted"]]
     raw_n = len(hits)
     hits = [h for h in hits if h["close"] >= MIN_PRICE and h["tv20"] >= MIN_TV]  # 1차: 주가·거래대금
     with ThreadPoolExecutor(max_workers=6) as ex:
