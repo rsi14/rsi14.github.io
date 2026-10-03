@@ -1,0 +1,54 @@
+name: 국장 RSI 리포트
+
+on:
+  schedule:
+    # 한국시간 월~금 오전 6:45 (UTC 일~목 21:45). GitHub 예약은 보통 수 분~20분 늦게 시작돼서 7시 전후 도착
+    - cron: "45 21 * * 0-4"
+  workflow_dispatch: {}  # Actions 탭에서 수동 실행 가능
+
+permissions:
+  contents: write   # 날짜별 결과 저장(커밋)
+  pages: write      # 웹페이지 배포
+  id-token: write
+
+concurrency:
+  group: rsi-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - run: python rsi_report.py
+        env:
+          RSI_THRESHOLD: "10"
+          RSI_PERIOD: "14"
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+
+      - name: 결과 저장
+        run: |
+          git config user.name "rsi-bot"
+          git config user.email "rsi-bot@users.noreply.github.com"
+          git add site/data
+          git diff --cached --quiet || git commit -m "RSI 데이터 $(TZ=Asia/Seoul date +%F)"
+          git push
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
