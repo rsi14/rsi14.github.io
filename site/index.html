@@ -66,6 +66,17 @@
   .bt b { display: block; font-size: 15px; margin-top: 2px; }
   .bt small { display: block; font-size: 11px; }
   .bt .now { outline: 2px solid var(--line); outline-offset: -2px; }
+  .guide { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px 20px; display: grid; gap: 10px; }
+  .guide.go { border: 2px solid var(--good); }
+  .guide .eyebrow { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .02em; }
+  .guide.go .eyebrow { color: var(--good); }
+  .guide h2 { margin: 0; font-size: clamp(19px, 4vw, 24px); line-height: 1.4; letter-spacing: -0.02em; text-wrap: balance; }
+  .guide h2 a { color: var(--down); text-decoration: none; border-bottom: 2px solid currentColor; }
+  .guide p { margin: 0; font-size: 14px; line-height: 1.65; color: var(--ink2); }
+  .guide .how { font-size: 13px; color: var(--muted); }
+  .card.pick { border: 2px solid var(--good); }
+  .pick-tag { background: var(--good); color: var(--card); }
+  .watch-tag { background: var(--chip); color: var(--ink2); }
 
   .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .bar .sp { flex: 1; }
@@ -146,7 +157,9 @@
     <select id="date" aria-label="기준일"></select>
   </div>
 
-  <section class="hero" aria-live="polite">
+  <section class="guide" id="guide" aria-live="polite"><div class="eyebrow">오늘의 가이드</div><h2>불러오는 중…</h2></section>
+
+  <section class="hero">
     <div>
       <div id="status"></div>
       <h1 id="headline">불러오는 중…</h1>
@@ -218,6 +231,12 @@ const ORDER = { "양호": 0, "보통": 1, "주의": 2 };
 const TORDER = { "동반": 0, "부분": 1, "단독": 2 };
 const TLABEL = { "동반": "시장 동반", "부분": "부분 동반", "단독": "단독 하락" };
 const typeOf = (b) => b == null ? null : b >= 25 ? "동반" : b >= 10 ? "부분" : "단독";
+const clean = (x) => x.grade !== "주의" && !(x.flags && x.flags.length);
+// 매수 후보: 시장 동반 하락 + 양호/보통 + 위험표시 없음 / 관찰: 부분 동반 + 양호
+const pickScore = (x) => x.type === "동반" && clean(x) ? (x.grade === "양호" ? 1000 : 0) + Math.min(x.tv20 || 0, 500) + (20 - x.rsi) : null;
+const isWatch = (x) => x.type === "부분" && x.grade === "양호" && clean(x);
+const josa = (w, a, b) => { const c = (w || "").trim().slice(-1).charCodeAt(0); return c >= 0xAC00 && c <= 0xD7A3 ? ((c - 0xAC00) % 28 ? a : b) : a + "(" + b + ")"; };
+const rankOf = (x) => pickScore(x) != null ? 0 : isWatch(x) ? 1 : 2;
 const TRACK_DAYS = 60;
 let today = null, tracking = [], gradeF = "ALL", mkt = "ALL", st = "ALL", showN = 12, typeF = "ALL", sigT = "ALL";
 
@@ -319,18 +338,49 @@ function renderHero() {
   $("heroChart").innerHTML = breadthChart(today.bhist, Math.max(260, $("heroChart").clientWidth || 340), panic, partial);
 }
 
+function renderGuide() {
+  const g = $("guide");
+  if (!today) { g.className = "guide"; g.innerHTML = `<div class="eyebrow">오늘의 가이드</div><h2>데이터가 없어요</h2>`; return; }
+  const items = today.items, bt = today.bt || {}, b = today.breadth, panic = today.panic || 25;
+  const picks = items.filter((x) => pickScore(x) != null).sort((a, c) => pickScore(c) - pickScore(a));
+  const watch = items.filter(isWatch);
+  const link = (x) => `<a href="#card-${x.code}">${x.name}</a>`;
+  const top = picks.slice(0, 3);
+  const lastPanic = (today.bhist || []).filter((h) => h[1] >= panic).map((h) => h[0]).pop();
+  const stat = (t) => bt[t] ? `과거 같은 조건은 5일 뒤 평균 <b class="${cls(bt[t].a5)}">${pct(bt[t].a5)}</b>(승률 ${bt[t].w5}%), 20일 뒤 <b class="${cls(bt[t].a20)}">${pct(bt[t].a20)}</b>(승률 ${bt[t].w20}%)였어요.` : "";
+  if (top.length) {
+    g.className = "guide go";
+    g.innerHTML = `<div class="eyebrow">오늘의 가이드 · 매수 후보 ${picks.length}종목</div>
+      <h2>${top.map(link).join(", ")}${picks.length > 3 ? ` 외 ${picks.length - 3}종목을` : josa(top[top.length - 1].name, "을", "를")} 사볼까요?</h2>
+      <p>시장 전체가 같이 빠진 날(과매도 비율 ${b != null ? b.toFixed(1) + "%" : "–"}) 함께 떨어진, 규모와 거래가 받쳐주는 종목이에요. ${stat("동반")}</p>
+      <p class="how">백테스트 방식: 다음 날 시가 매수 · 비용 0.3% 차감. 한 번에 다 사기보다 나눠서 들어가는 걸 기준으로 보세요.${watch.length ? ` 관찰 종목: ${watch.slice(0, 3).map(link).join(", ")}` : ""}</p>`;
+  } else if (watch.length) {
+    g.className = "guide";
+    g.innerHTML = `<div class="eyebrow">오늘의 가이드 · 확실한 후보 없음</div>
+      <h2>${watch.slice(0, 3).map(link).join(", ")}${josa(watch.slice(0, 3).pop().name, "은", "는")} 지켜볼 만해요</h2>
+      <p>시장이 일부만 같이 빠진 날의 우량 종목이에요. ${stat("부분")} 더 빠져서 시장 과매도 비율이 ${panic}%를 넘으면 매수 후보로 올라와요.</p>`;
+  } else {
+    g.className = "guide";
+    g.innerHTML = `<div class="eyebrow">오늘의 가이드</div>
+      <h2>오늘은 쉬어가는 날이에요</h2>
+      <p>시장 과매도 비율이 ${b != null ? b.toFixed(1) + "%" : "–"}로 ${b != null && b < 10 ? "평온해요" : "패닉 수준이 아니에요"}. 지금 RSI ${today.threshold} 아래 종목들은 ${items.length ? "대부분 혼자 빠졌거나 규모가 작은 종목이에요" : "없어요"}. ${bt["단독"] ? `혼자 빠진 종목은 과거 20일 뒤 평균 <b class="${cls(bt["단독"].a20)}">${pct(bt["단독"].a20)}</b>(승률 ${bt["단독"].w20}%)였어요.` : ""}</p>
+      <p class="how">시장 과매도 비율이 ${panic}%를 넘는 날 매수 후보가 나와요.${lastPanic ? ` 마지막으로 넘은 날: ${ymd(lastPanic)}` : ""}</p>`;
+  }
+}
+
 function renderCards() {
   if (!today) { $("cards").innerHTML = ""; return; }
   const items = today.items.filter((x) => (mkt === "ALL" || x.market === mkt) &&
     (typeF === "ALL" || x.type === typeF) &&
     (gradeF === "ALL" || (gradeF === "NOBAD" ? x.grade !== "주의" : x.grade === gradeF)))
-    .sort((a, b) => (TORDER[a.type] ?? 3) - (TORDER[b.type] ?? 3) || (ORDER[a.grade] ?? 1) - (ORDER[b.grade] ?? 1) || a.rsi - b.rsi);
+    .sort((a, b) => rankOf(a) - rankOf(b) || (pickScore(b) ?? 0) - (pickScore(a) ?? 0) ||
+      (TORDER[a.type] ?? 3) - (TORDER[b.type] ?? 3) || (ORDER[a.grade] ?? 1) - (ORDER[b.grade] ?? 1) || a.rsi - b.rsi);
   if (!items.length) { $("cards").innerHTML = `<div class="empty">조건에 맞는 종목이 없어요</div>`; return; }
   $("cards").innerHTML = items.map((x) => `
-    <article class="card ${x.grade === "주의" ? "dim" : ""}" data-code="${x.code}">
+    <article class="card ${pickScore(x) != null ? "pick" : x.grade === "주의" ? "dim" : ""}" id="card-${x.code}" data-code="${x.code}">
       <div class="head">
         <div class="who">
-          <div class="nm">${x.name}${x.type ? `<span class="pill t-${x.type}">${TLABEL[x.type]}</span>` : ""}<span class="pill g-${x.grade || "보통"}"><i></i>${x.grade || "–"}</span></div>
+          <div class="nm">${x.name}${pickScore(x) != null ? `<span class="pill pick-tag">매수 후보</span>` : isWatch(x) ? `<span class="pill watch-tag">관찰</span>` : ""}${x.type ? `<span class="pill t-${x.type}">${TLABEL[x.type]}</span>` : ""}<span class="pill g-${x.grade || "보통"}"><i></i>${x.grade || "–"}</span></div>
           <div class="sub">${x.market === "KOSPI" ? "코스피" : "코스닥"} · ${x.code}</div>
         </div>
         <div class="px"><div class="p num">${fmt(Math.round(x.close))}원</div><div class="c num ${cls(x.chg)}">${pct(x.chg)}</div></div>
@@ -409,7 +459,7 @@ addEventListener("resize", () => { if (innerWidth === lastW) return; lastW = inn
 
 async function loadDate(d) {
   try { today = await getJSON(`data/${d}.json`); } catch { today = null; }
-  renderHero(); renderCards();
+  renderGuide(); renderHero(); renderCards();
   $("foot").innerHTML = today ? `업데이트 ${today.generated} KST${today.failed ? ` · 조회 실패 ${today.failed}종목 제외` : ""}<br>RSI(${today.period})는 Wilder 방식. 과거 성과는 ${today.bt ? today.bt.from.slice(0, 4) + "~" + today.bt.to.slice(0, 4) + "년 " : ""}백테스트(다음 날 시가 매수, 비용 0.3% 차감, 현재 상장 종목 기준)이고, 미래 수익을 보장하지 않아요.` : "";
 }
 (async () => {
@@ -417,7 +467,7 @@ async function loadDate(d) {
   renderTrack();
   let idx = [];
   try { idx = await getJSON("data/index.json"); } catch {}
-  if (!idx.length) { renderHero(); $("headline").textContent = "첫 실행 후 여기에 결과가 나와요"; return; }
+  if (!idx.length) { renderGuide(); renderHero(); $("headline").textContent = "첫 실행 후 여기에 결과가 나와요"; return; }
   $("date").innerHTML = idx.map((e) => `<option value="${e.date}">${e.date} · ${e.count}종목</option>`).join("");
   loadDate(idx[0].date);
 })();
