@@ -1,0 +1,41 @@
+name: 백테스트 v2
+
+on:
+  workflow_dispatch: {}  # Actions 탭에서 수동 실행
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: rsi-report
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: github-pages
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - run: python backtest2.py
+
+      - name: 결과 저장
+        run: |
+          git config user.name "rsi-bot"
+          git config user.email "rsi-bot@users.noreply.github.com"
+          git add site/data/bt2.json
+          git diff --cached --quiet || git commit -m "백테스트 v2 결과 $(TZ=Asia/Seoul date +%F)"
+          git pull --rebase
+          git push
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4
