@@ -110,6 +110,13 @@ TRACK_DAYS = int(os.getenv("TRACK_DAYS", "60"))      # 신호 후 추적 거래�
 BACKFILL_DAYS = int(os.getenv("BACKFILL_DAYS", "120"))  # 과거 신호 자동 탐색 범위(거래일)
 WARMUP = 60  # RSI 안정화용 최소 데이터 길이
 LIMIT_DOWN = -0.305  # 하루 -30% 초과 하락 = 가격제한폭 밖(정리매매 등)
+MIN_PRICE, MIN_TV, MIN_MCAP = 1000, 10, 1000  # 잡주 제외: 주가(원), 20일 평균 거래대금(억), 시총(억)
+
+
+def tv20_at(rows, i):
+    """i일 기준 20일 평균 거래대금(억원)"""
+    w = rows[max(0, i - 19):i + 1]
+    return sum(c * v for _, c, v in w) / len(w) / 1e8
 
 
 def find_signals(rows, rsis):
@@ -121,6 +128,8 @@ def find_signals(rows, rsis):
         if r is None or prev is None or not (r <= RSI_THRESHOLD < prev):
             continue
         if rows[i - 1][1] and rows[i][1] / rows[i - 1][1] - 1 <= LIMIT_DOWN:  # 정리매매 등
+            continue
+        if rows[i][1] < MIN_PRICE or tv20_at(rows, i) < MIN_TV:  # 잡주 제외
             continue
         entry = rows[i][1]
         js = range(i + 1, min(n, i + 1 + TRACK_DAYS))
@@ -160,8 +169,7 @@ def scan_one(market, code, name):
         rt = rsis[-90:]
         out["spark"] = [round(c) for _, c, _ in tail]
         out["low"] = [i for i, v in enumerate(rt) if v is not None and v <= RSI_THRESHOLD]
-        tv = [c * v for _, c, v in rows[-20:]]
-        out["tv20"] = round(sum(tv) / len(tv) / 1e8, 1)  # 20일 평균 거래대금(억원)
+        out["tv20"] = round(tv20_at(rows, len(rows) - 1), 1)  # 20일 평균 거래대금(억원)
         hi52 = max(c for _, c, _ in rows[-250:])
         out["from_high"] = round((last_close / hi52 - 1) * 100, 1)
     return out
@@ -405,7 +413,7 @@ def backtest_summary(path="site/data/backtest.json"):
     years = [c["k"][5] for c in bt["cells"]]
     out = {"from": min(years) + "0101" if years else bt.get("from"), "to": bt.get("to"), "cost": bt.get("cost")}
     for name, keys in groups.items():
-        cells = [c for c in bt["cells"] if c["k"][0] == rule and c["k"][4] in keys]
+        cells = [c for c in bt["cells"] if c["k"][0] == rule and c["k"][4] in keys and c["k"][2] != "a<10"]
         g = {f: sum(c[f] for c in cells) for f in ("n", "s5", "c5", "w5", "s20", "c20", "w20")}
         if g["c20"]:
             out[name] = {"n": g["n"], "a5": round(g["s5"] / g["c5"], 1), "w5": round(g["w5"] / g["c5"] * 100),
@@ -443,8 +451,12 @@ def main():
     print(f"시장 과매도 비율(RSI {BREADTH_RSI}↓): {today_b}")
 
     hits = [r for r in current if r["rsi"] <= RSI_THRESHOLD and not r["halted"]]
+    raw_n = len(hits)
+    hits = [h for h in hits if h["close"] >= MIN_PRICE and h["tv20"] >= MIN_TV]  # 1차: 주가·거래대금
     with ThreadPoolExecutor(max_workers=6) as ex:
         hits = list(ex.map(enrich, hits))
+    hits = [h for h in hits if h["grade"] != "주의"]  # 2차: 시총·위험표시
+    print(f"RSI {RSI_THRESHOLD:g} 이하 {raw_n}종목 중 잡주 제외 후 {len(hits)}종목")
     tracking = update_tracking(results, breadth)
     for h in hits:
         cb = breadth.get(h.get("cross"))
@@ -465,7 +477,7 @@ def main():
     save_site_data(hits, base_date, len(current), failed, extra={
         "breadth": round(today_b, 1) if today_b is not None else None,
         "bhist": [[d, round(breadth[d], 1)] for d in dates],
-        "panic": PANIC, "partial": PARTIAL, "brsi": BREADTH_RSI,
+        "panic": PANIC, "partial": PARTIAL, "brsi": BREADTH_RSI, "raw": raw_n,
         "bt": backtest_summary(),
     })
 
