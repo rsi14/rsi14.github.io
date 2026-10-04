@@ -154,7 +154,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand">RSI 과매도 알리미<span id="basis">코스피·코스닥 전 종목</span></div>
-    <select id="date" aria-label="기준일"></select>
+    <div style="display:flex;gap:8px;align-items:center"><div class="seg" id="mkSw"><button data-k="kr">국장</button><button data-k="us">미장</button></div><select id="date" aria-label="기준일"></select></div>
   </div>
 
   <section class="guide" id="guide" aria-live="polite"><div class="eyebrow">오늘의 가이드</div><h2>불러오는 중…</h2></section>
@@ -222,6 +222,9 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => Number(n).toLocaleString("ko-KR");
+const MK = new URLSearchParams(location.search).get("m") === "us" ? "us" : "kr", US = MK === "us";
+const money = (v) => US ? "$" + Number(v).toFixed(2) : fmt(Math.round(v)) + "원";
+const link0 = (c) => US ? "https://finance.yahoo.com/quote/" + c : "https://m.stock.naver.com/domestic/stock/" + c + "/total";
 const pct = (v) => (v > 0 ? "+" : "") + v.toFixed(1) + "%";
 const cls = (v) => (v < 0 ? "neg" : v > 0 ? "pos" : "");
 const ymd = (s) => `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6)}`;
@@ -240,7 +243,7 @@ const rankOf = (x) => pickScore(x) != null ? 0 : isLarge(x) ? 1 : isWatch(x) ? 2
 const TRACK_DAYS = 60;
 let today = null, tracking = [], gradeF = "ALL", mkt = "ALL", st = "ALL", showN = 12, typeF = "ALL", sigT = "ALL";
 
-async function getJSON(p) { const r = await fetch(p + "?t=" + Date.now()); if (!r.ok) throw 0; return r.json(); }
+async function getJSON(p) { const r = await fetch((US ? p.replace("data/", "data/us/") : p) + "?t=" + Date.now()); if (!r.ok) throw 0; return r.json(); }
 
 function niceStep(raw) { const p = Math.pow(10, Math.floor(Math.log10(raw || 1))); const n = raw / p; return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * p; }
 function retChart(values, { w = 600, h = 200, compact = false } = {}) {
@@ -383,9 +386,9 @@ function renderCards() {
       <div class="head">
         <div class="who">
           <div class="nm">${x.name}${pickScore(x) != null ? `<span class="pill pick-tag">매수 후보 · 5일 보유</span>` : isLarge(x) ? `<span class="pill pick-tag">대형주 눌림 · RSI 50 매도</span>` : isWatch(x) ? `<span class="pill watch-tag">관찰</span>` : ""}${x.type ? `<span class="pill t-${x.type}">${TLABEL[x.type]}</span>` : ""}<span class="pill g-${x.grade || "보통"}"><i></i>${x.grade || "–"}</span></div>
-          <div class="sub">${x.market === "KOSPI" ? "코스피" : "코스닥"} · ${x.code}</div>
+          <div class="sub">${US ? x.market : x.market === "KOSPI" ? "코스피" : "코스닥"} · ${x.code}</div>
         </div>
-        <div class="px"><div class="p num">${fmt(Math.round(x.close))}원</div><div class="c num ${cls(x.chg)}">${pct(x.chg)}</div></div>
+        <div class="px"><div class="p num">${money(x.close)}</div><div class="c num ${cls(x.chg)}">${pct(x.chg)}</div></div>
       </div>
       <div class="rsiRow">
         <div class="rsiVal">RSI <b>${x.rsi.toFixed(1)}</b></div>
@@ -394,7 +397,7 @@ function renderCards() {
       ${x.spark ? `<div class="chartBox"><div class="spk"></div><div class="legend"><span><i></i>RSI ${today.threshold} 이하였던 날</span></div></div>` : ""}
       <div class="metrics">
         <div><span>시가총액</span><b class="num">${x.mcap != null ? eok(x.mcap) : "–"}</b></div>
-        <div><span>거래대금 20일 평균</span><b class="num">${x.tv20 != null ? fmt(x.tv20) + "억" : "–"}</b></div>
+        <div><span>거래대금 20일 평균</span><b class="num">${x.tv20 != null ? (US ? "$" + fmt(x.tv20) + "M" : fmt(x.tv20) + "억") : "–"}</b></div>
         <div><span>PER · PBR</span><b class="num">${x.per != null ? x.per.toFixed(1) : "–"} · ${x.pbr != null ? x.pbr.toFixed(2) : "–"}</b></div>
         <div><span>52주 고점 대비</span><b class="num neg">${x.from_high != null ? pct(x.from_high) : "–"}</b></div>
       </div>
@@ -405,7 +408,7 @@ function renderCards() {
         ${x.hist ? `<div><span class="lbl">이 종목 과거</span>RSI ${today.threshold} 이하 진입 ${x.hist.n}회 · 5일 뒤 평균 <b class="${cls(x.hist.d5)}">${pct(x.hist.d5)}</b>${x.hist.d20 != null ? ` · 20일 뒤 <b class="${cls(x.hist.d20)}">${pct(x.hist.d20)}</b>` : ""}</div>`
                  : `<div><span class="lbl">이 종목 과거</span>기록상 첫 신호</div>`}
       </div>
-      <a class="out" href="https://m.stock.naver.com/domestic/stock/${x.code}/total" target="_blank" rel="noopener">네이버 증권에서 차트·뉴스 보기 →</a>
+      <a class="out" href="${link0(x.code)}" target="_blank" rel="noopener">${US ? "Yahoo Finance" : "네이버 증권"}에서 차트·뉴스 보기 →</a>
     </article>`).join("");
   $("cards").querySelectorAll(".card").forEach((el) => {
     const x = items.find((i) => i.code === el.dataset.code), box = el.querySelector(".spk");
@@ -427,7 +430,7 @@ function renderTrack() {
   $("sigList").innerHTML = shown.map((s, i) => {
     const n = s.p.length, last = n ? s.p[n - 1] : null, t = typeOf(s.b);
     return `<div class="sig" data-i="${i}"><button aria-expanded="false">
-      <div style="min-width:0"><div class="nm">${s.name}${t ? ` <span class="pill t-${t}" style="font-size:11px;padding:1px 7px">${TLABEL[t]}</span>` : ""}</div><div class="sub">${ymd(s.date)} 신호 · 그날 종가 ${fmt(Math.round(s.entry))}원${s.b != null ? ` · 시장 과매도 ${s.b}%` : ""}</div></div>
+      <div style="min-width:0"><div class="nm">${s.name}${t ? ` <span class="pill t-${t}" style="font-size:11px;padding:1px 7px">${TLABEL[t]}</span>` : ""}</div><div class="sub">${ymd(s.date)} 신호 · 그날 종가 ${money(s.entry)}${s.b != null ? ` · 시장 과매도 ${s.b}%` : ""}</div></div>
       <div>${n > 1 ? sparkRet(s.p) : ""}</div>
       <div class="ret num ${last != null ? cls(last) : ""}">${last != null ? pct(last) : "–"}<small>${n ? (n >= TRACK_DAYS ? "60일 완료" : `${n}일째`) : "내일부터"}</small></div>
     </button><div class="detail" hidden></div></div>`;
@@ -439,7 +442,7 @@ function renderTrack() {
       const n = s.p.length, at = (k) => n >= k ? `<b class="num ${cls(s.p[k - 1])}">${pct(s.p[k - 1])}</b>` : `<b>–</b>`;
       det.innerHTML = retChart(Array.from({ length: Math.max(n, 5) }, (_, k) => k < n ? s.p[k] : null), { w: Math.max(260, det.clientWidth || 560), h: 170 }) +
         `<div class="kv"><div>1일 뒤${at(1)}</div><div>5일 뒤${at(5)}</div><div>20일 뒤${at(20)}</div><div>60일 뒤${at(60)}</div></div>` +
-        `<a class="out" href="https://m.stock.naver.com/domestic/stock/${s.code}/total" target="_blank" rel="noopener">네이버 증권에서 보기 →</a>`;
+        `<a class="out" href="${link0(s.code)}" target="_blank" rel="noopener">${US ? "Yahoo Finance" : "네이버 증권"}에서 보기 →</a>`;
     }
   }));
   const m = $("more"); if (m) m.addEventListener("click", () => { showN += 20; renderTrack(); });
@@ -456,6 +459,7 @@ seg("stSeg", "s", (v) => { st = v; showN = 12; renderTrack(); });
 seg("typeSeg", "t", (v) => { typeF = v; renderCards(); });
 seg("sigTypeSeg", "t", (v) => { sigT = v; showN = 12; renderTrack(); });
 $("date").addEventListener("change", (e) => loadDate(e.target.value));
+document.querySelectorAll("#mkSw button").forEach((b) => { b.classList.toggle("on", b.dataset.k === MK); b.onclick = () => { location.search = b.dataset.k === "us" ? "?m=us" : ""; }; });
 let rz, lastW = innerWidth;
 addEventListener("resize", () => { if (innerWidth === lastW) return; lastW = innerWidth; clearTimeout(rz); rz = setTimeout(() => { renderHero(); renderCards(); renderTrack(); }, 200); });
 
