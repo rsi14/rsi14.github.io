@@ -468,6 +468,7 @@ seg("stSeg", "s", (v) => { st = v; showN = 12; renderTrack(); });
 seg("typeSeg", "t", (v) => { typeF = v; renderCards(); });
 seg("sigTypeSeg", "t", (v) => { sigT = v; showN = 12; renderTrack(); });
 $("date").addEventListener("change", (e) => loadDate(e.target.value));
+if (US) $("mktSeg").hidden = true;
 document.querySelectorAll("#mkSw button").forEach((b) => { b.classList.toggle("on", b.dataset.k === MK); b.onclick = () => { location.search = b.dataset.k === "us" ? "?m=us" : ""; }; });
 let rz, lastW = innerWidth;
 addEventListener("resize", () => { if (innerWidth === lastW) return; lastW = innerWidth; clearTimeout(rz); rz = setTimeout(() => { renderHero(); renderCards(); renderTrack(); }, 200); });
