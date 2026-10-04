@@ -42,6 +42,10 @@ jobs:
         continue-on-error: true
         run: pip install yfinance && python us_report.py
 
+      - name: 썸네일
+        continue-on-error: true
+        run: sudo apt-get install -y -qq fonts-nanum > /dev/null && pip install pillow && python og.py
+
       - name: 결과 저장
         run: |
           git config user.name "rsi-bot"
