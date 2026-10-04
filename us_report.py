@@ -36,9 +36,20 @@ def main():
     tb = breadth.get(base)
     hits = [r for r in cur if r["rsi"] <= K.RSI_THRESHOLD and not r["halted"]]
     tracking = K.update_tracking(results, breadth, site_dir=OUT)
+    try:  # 원/달러 환율 (시총 원화 환산)
+        fx = float(yf.Ticker("KRW=X").history(period="5d")["Close"].dropna().iloc[-1])
+    except Exception:
+        fx = None
     for h in hits:
         h["tv20"] = round(h["tv20"] * 100)  # $M
         h["grade"], h["flags"], h["lg"] = ("양호" if h["tv20"] >= 300 else "보통"), [], False
+        try:  # 시총(억원)·PER·PBR
+            info = yf.Ticker(h["code"]).info
+            h["mcap"] = round(info["marketCap"] * fx / 1e8) if info.get("marketCap") and fx else None
+            h["per"] = round(info["trailingPE"], 1) if info.get("trailingPE") else None
+            h["pbr"] = round(info["priceToBook"], 2) if info.get("priceToBook") else None
+        except Exception:
+            pass
         cb = breadth.get(h.get("cross"))
         h["cb"] = round(cb, 1) if cb is not None else None
         h["type"] = K.drop_type(cb)
