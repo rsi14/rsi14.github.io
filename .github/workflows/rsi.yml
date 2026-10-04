@@ -38,6 +38,10 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
 
+      - name: 미장
+        continue-on-error: true
+        run: pip install yfinance && python us_report.py
+
       - name: 결과 저장
         run: |
           git config user.name "rsi-bot"
