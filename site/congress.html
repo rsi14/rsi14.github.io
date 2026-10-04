@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>의원 매매 · RSI 과매도 알리미</title>
+<meta property="og:title" content="미 하원의원 주식 매매 공시">
+<meta property="og:image" content="https://rsi14.github.io/og.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root { --bg:#f3f4f6; --card:#fff; --ink:#16181d; --ink2:#3b404a; --muted:#6f7480; --line:#e3e5ea; --chip:#e9ebef;
+    --down:#2a62d4; --up:#d23b2b; --good:#1f8a5b; --goodbg:#e2f3ea; --badbg:#fbe4e1;
+    --sans:"IBM Plex Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#111317; --card:#1a1d22; --ink:#eceef2; --ink2:#c4c8d0; --muted:#8d929c; --line:#2a2e35; --chip:#252930;
+    --down:#6c9bf5; --up:#f27b6b; --good:#53c48d; --goodbg:#17322a; --badbg:#3a1f1c; color-scheme:dark; } }
+  :root[data-theme="dark"] { --bg:#111317; --card:#1a1d22; --ink:#eceef2; --ink2:#c4c8d0; --muted:#8d929c; --line:#2a2e35; --chip:#252930;
+    --down:#6c9bf5; --up:#f27b6b; --good:#53c48d; --goodbg:#17322a; --badbg:#3a1f1c; color-scheme:dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); }
+  .wrap { max-width:980px; margin:0 auto; padding-block:20px 64px; padding-inline:16px; display:grid; gap:16px; }
+  .top { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .brand { font-weight:700; font-size:15px; }
+  .seg { display:inline-flex; background:var(--chip); border-radius:10px; padding:3px; gap:2px; }
+  .seg a, .seg button { font:inherit; font-size:13px; padding:6px 11px; border:0; border-radius:8px; background:transparent; color:var(--muted); cursor:pointer; text-decoration:none; }
+  .seg .on { background:var(--card); color:var(--ink); font-weight:600; }
+  .hero { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:18px 20px; }
+  .hero h1 { margin:0 0 6px; font-size:clamp(20px,4vw,26px); letter-spacing:-.02em; }
+  .hero p { margin:0; font-size:14px; line-height:1.6; color:var(--ink2); }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input { font:inherit; font-size:13px; padding:7px 10px; border-radius:9px; border:1px solid var(--line); background:var(--card); color:var(--ink); min-width:0; }
+  .list { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr)); gap:10px; }
+  .t { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; display:grid; gap:8px; min-width:0; }
+  .row { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+  .tk { font-family:var(--mono); font-weight:600; font-size:17px; }
+  .nm { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pill { font-size:12px; font-weight:600; padding:2px 8px; border-radius:999px; white-space:nowrap; }
+  .buy { background:var(--goodbg); color:var(--good); } .sell { background:var(--badbg); color:var(--up); }
+  .who { font-size:13px; color:var(--ink2); }
+  .ret { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .ret div { background:var(--bg); border-radius:9px; padding:7px 9px; font-size:11px; color:var(--muted); }
+  .ret b { display:block; font-family:var(--mono); font-size:15px; margin-top:2px; color:var(--ink); }
+  .pos { color:var(--up) !important; } .neg { color:var(--down) !important; }
+  .links { font-size:12px; display:flex; gap:12px; } .links a { color:var(--down); text-decoration:none; }
+  .empty { padding:32px; text-align:center; color:var(--muted); background:var(--card); border:1px dashed var(--line); border-radius:14px; }
+  footer { font-size:12px; color:var(--muted); line-height:1.7; }
+  a:focus-visible, button:focus-visible, input:focus-visible { outline:2px solid var(--down); outline-offset:2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">RSI 과매도 알리미</div>
+    <div class="seg"><a href="./">국장</a><a href="./?m=us">미장</a><a class="on" href="congress.html">의원 매매</a></div>
+  </div>
+  <section class="hero">
+    <h1>미 하원의원 주식 매매 공시</h1>
+    <p id="sub">불러오는 중…</p>
+  </section>
+  <div class="bar">
+    <div class="seg" id="tt"><button class="on" data-v="">전체</button><button data-v="P">매수</button><button data-v="S">매도</button></div>
+    <input id="q" list="members" placeholder="의원 이름 · 종목 검색" aria-label="의원 이름 또는 종목 검색"><datalist id="members"></datalist>
+  </div>
+  <div class="list" id="list"></div>
+  <footer id="foot"></footer>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const pct = (v) => v == null ? "–" : (v > 0 ? "+" : "") + v.toFixed(1) + "%";
+const cls = (v) => v == null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "";
+const ymd = (s) => s.slice(0, 4) + "-" + s.slice(4, 6) + "-" + s.slice(6);
+const days = (a, b) => Math.round((Date.parse(ymd(b)) - Date.parse(ymd(a))) / 864e5);
+const OWN = { SP: "배우자", JT: "공동", DC: "자녀" }, TT = { P: "매수", S: "매도", E: "교환" };
+let data = null, tt = "";
+function render() {
+  const q = $("q").value.trim().toLowerCase();
+  const items = data.items.filter((t) => (!tt || t.tt === tt) && (!q || (t.m + " " + t.tk + " " + t.name).toLowerCase().includes(q)));
+  $("list").innerHTML = items.length ? items.map((t) => `
+    <article class="t">
+      <div class="row"><span class="tk">${t.tk}</span><span class="pill ${t.tt === "P" ? "buy" : "sell"}">${TT[t.tt] || t.tt}${t.at === "OP" ? " · 옵션" : ""}</span></div>
+      <div class="nm">${t.name || ""}</div>
+      <div class="who"><b>${t.m}</b> (${t.st})${t.own ? " · " + OWN[t.own] : ""} · ${t.amt}</div>
+      <div class="who">거래 ${ymd(t.td)} → 공시 ${ymd(t.fd)} <span style="color:var(--muted)">(${days(t.td, t.fd)}일 뒤)</span></div>
+      <div class="ret"><div>거래일 이후<b class="${cls(t.rt)}">${pct(t.rt)}</b></div><div>공시일 이후<b class="${cls(t.rf)}">${pct(t.rf)}</b></div></div>
+      <div class="links"><a href="https://finance.yahoo.com/quote/${t.tk.replace(".", "-")}" target="_blank" rel="noopener">차트</a><a href="https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/${t.y}/${t.doc}.pdf" target="_blank" rel="noopener">공시 원문</a></div>
+    </article>`).join("") : `<div class="empty">조건에 맞는 공시가 없어요</div>`;
+}
+document.querySelectorAll("#tt button").forEach((b) => b.onclick = () => {
+  document.querySelectorAll("#tt button").forEach((x) => x.classList.toggle("on", x === b)); tt = b.dataset.v; render();
+});
+$("q").oninput = render;
+(async () => {
+  try { data = await (await fetch("data/congress/feed.json?t=" + Date.now())).json(); }
+  catch { $("sub").textContent = "첫 수집 후 여기에 공시가 나와요"; return; }
+  const pel = data.items.filter((t) => /pelosi/i.test(t.m)).length;
+  $("sub").innerHTML = `최근 공시 ${data.items.length}건 (전체 수집 ${data.n_trades.toLocaleString()}건)${pel ? ` · 펠로시 ${pel}건` : ""}. 수익률은 거래일·공시일 종가 대비 최근 종가예요.`;
+  $("members").innerHTML = [...new Set(data.items.map((t) => t.m))].map((m) => `<option value="${m}">`).join("");
+  $("foot").innerHTML = `업데이트 ${data.generated} KST · 출처: 미 하원 서기국 거래 공시(PTR). 공시는 거래 후 최대 45일 늦게 나오고 금액은 구간으로만 공개돼요. 종이 제출 공시(${data.n_scan}건)는 읽지 못해 빠져 있어요.`;
+  render();
+})();
+</script>
+</body>
+</html>
