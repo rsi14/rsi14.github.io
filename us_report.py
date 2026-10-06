@@ -17,7 +17,7 @@ SRC = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/dat
 def main():
     uni = {r["Symbol"].replace(".", "-"): (r["Security"], r.get("GICS Sector", ""))
            for r in csv.DictReader(io.StringIO(requests.get(SRC, timeout=30).text))}
-    df = yf.download(list(uni), period="2y", interval="1d", auto_adjust=True,
+    df = yf.download(list(uni), period="2y", interval="1d", auto_adjust=False,
                      group_by="ticker", threads=True, progress=False)
     rows_map = {}
     for s in uni:
