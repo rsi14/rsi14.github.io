@@ -108,7 +108,8 @@
   .rsiRow { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; padding-bottom: 10px; }
   .rsiVal { font-size: 13px; color: var(--ink2); }
   .rsiVal b { font-family: var(--mono); font-size: 15px; color: var(--down); }
-  .gauge { position: relative; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--down) 0 10%, var(--chip) 10% 30%, var(--grid) 30% 100%); }
+  .gauge { position: relative; height: 6px; border-radius: 3px; background: var(--grid); }
+  .gauge b { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--down); }
   .gauge i { position: absolute; top: -4px; width: 3px; height: 14px; border-radius: 2px; background: var(--ink); transform: translateX(-1px); }
   .gauge span { position: absolute; top: 9px; font-size: 10px; color: var(--muted); transform: translateX(-50%); font-family: var(--mono); }
   .chartBox { min-width: 0; }
@@ -401,7 +402,7 @@ function renderCards() {
       </div>
       <div class="rsiRow">
         <div class="rsiVal">RSI <b>${x.rsi.toFixed(1)}</b></div>
-        <div class="gauge" aria-hidden="true"><i style="left:${x.rsi}%"></i><span style="left:10%">10</span><span style="left:30%">30</span><span style="left:70%">70</span></div>
+        <div class="gauge" aria-hidden="true"><b style="width:${Math.min(x.rsi, 100)}%"></b><i style="left:${today.threshold}%"></i><span style="left:${today.threshold}%">${today.threshold}</span><span style="left:30%">30</span><span style="left:70%">70</span></div>
       </div>
       ${x.spark ? `<div class="chartBox"><div class="spk"></div><div class="legend"><span><i></i>RSI ${today.threshold} 이하였던 날</span></div></div>` : ""}
       <div class="metrics">
