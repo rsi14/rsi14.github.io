@@ -88,17 +88,11 @@ def rsi_series(closes, period=14):
         d = closes[i] - closes[i - 1]
         gains.append(max(d, 0))
         losses.append(max(-d, 0))
-    avg_g = sum(gains[:period]) / period
-    avg_l = sum(losses[:period]) / period
-
-    def val(g, l):
-        return 100.0 if l == 0 else 100 - 100 / (1 + g / l)
-
-    out[period] = val(avg_g, avg_l)
-    for i in range(period, len(gains)):
-        avg_g = (avg_g * (period - 1) + gains[i]) / period
-        avg_l = (avg_l * (period - 1) + losses[i]) / period
-        out[i + 1] = val(avg_g, avg_l)
+    # 국내 증권사 앱과 같은 단순평균 RSI: 최근 period일 상승폭 합 / (상승폭 합 + 하락폭 합)
+    for i in range(period, len(closes)):
+        g = sum(gains[i - period:i])
+        l = sum(losses[i - period:i])
+        out[i] = 50.0 if g + l == 0 else 100 * g / (g + l)
     return out
 
 
