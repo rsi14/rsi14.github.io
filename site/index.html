@@ -108,6 +108,7 @@
   .rsiRow { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; padding-bottom: 10px; }
   .rsiVal { font-size: 13px; color: var(--ink2); }
   .rsiVal b { font-family: var(--mono); font-size: 15px; color: var(--down); }
+  .rsiVal .arsi { display: block; font-size: 11px; color: var(--muted); font-family: var(--mono); }
   .gauge { position: relative; height: 6px; border-radius: 3px; background: var(--grid); }
   .gauge b { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--down); }
   .gauge i { position: absolute; top: -4px; width: 3px; height: 14px; border-radius: 2px; background: var(--ink); transform: translateX(-1px); }
@@ -200,14 +201,14 @@
       <button data-m="KOSDAQ">코스닥</button>
     </div>
     <div class="sp"></div>
-    <div class="hint">하락 유형 = RSI 10 아래로 들어온 날의 시장 과매도 비율 (25%↑ 동반 · 10~25% 부분 · 10%↓ 단독)<br>등급: 양호 = 시총 1조↑·거래대금 50억↑ · 잡주(시총 1천억↓·거래대금 10억↓·1,000원↓·관리/투자주의/정리매매 등)는 제외</div>
+    <div class="hint">하락 유형 = RSI 20 아래로 들어온 날의 시장 과매도 비율 (25%↑ 동반 · 10~25% 부분 · 10%↓ 단독)<br>등급: 양호 = 시총 1조↑·거래대금 50억↑ · 잡주(시총 1천억↓·거래대금 10억↓·1,000원↓·관리/투자주의/정리매매 등)는 제외</div>
   </div>
 
   <div class="cards" id="cards"></div>
 
   <section class="sec">
     <h2>지난 신호, 지금은?</h2>
-    <p>RSI가 10 아래로 떨어진 날 종가를 기준으로, 이후 60거래일 동안의 수익률 (최근 약 6개월 신호)</p>
+    <p>RSI가 20 아래로 떨어진 날 종가를 기준으로, 이후 60거래일 동안의 수익률 (최근 약 6개월 신호)</p>
     <div class="stats" id="hStats"></div>
     <div class="panel pad" style="margin-top:10px"><div id="avgChart"></div></div>
     <div class="bar" style="margin:12px 0 10px">
@@ -360,7 +361,7 @@ function renderGuide() {
   const link = (x) => `<a href="#card-${x.code}">${x.name}</a>`;
   const top = picks.slice(0, 3), large = items.filter(isLarge).sort((a, c) => c.tv20 - a.tv20);
   const names = (arr, j) => arr.slice(0, 3).map(link).join(", ") + (arr.length > 3 ? ` 외 ${arr.length - 3}종목${j[0]}` : josa(arr.slice(0, 3).pop().name, j[0], j[1]));
-  const lg = large.length ? `<p><b>대형주 눌림</b> · ${names(large, ["을", "를"])} 사볼까요? 거래대금 200억↑ 종목이 RSI ${today.threshold} 아래로 들어왔어요. <b>매도: RSI 50 회복 시</b>.</p>` : "";
+  const lg = large.length ? `<p><b>대형주 눌림</b> · ${names(large, ["을", "를"])} 사볼까요? 거래대금 200억↑ 종목이 RSI 25 아래로 들어왔어요. <b>매도: RSI 50 회복 시</b> (평균 16거래일). 과거 평균 <b class="pos">+4.3%</b>(승률 65%), 2021~2026년 매년 플러스였어요.</p>` : "";
   const lastPanic = (today.bhist || []).filter((h) => h[1] >= panic).map((h) => h[0]).pop();
   const stat = (t) => bt[t] ? `과거 같은 조건은 5일 뒤 평균 <b class="${cls(bt[t].a5)}">${pct(bt[t].a5)}</b>(승률 ${bt[t].w5}%), 20일 뒤 <b class="${cls(bt[t].a20)}">${pct(bt[t].a20)}</b>(승률 ${bt[t].w20}%)였어요.` : "";
   if (top.length || large.length) {
@@ -401,7 +402,7 @@ function renderCards() {
         <div class="px"><div class="p num">${money(x.close)}</div><div class="c num ${cls(x.chg)}">${pct(x.chg)}</div></div>
       </div>
       <div class="rsiRow">
-        <div class="rsiVal">RSI <b>${x.rsi.toFixed(1)}</b></div>
+        <div class="rsiVal">RSI <b>${x.rsi.toFixed(1)}</b>${x.arsi != null ? `<small class="arsi">앱 기준 ${x.arsi.toFixed(1)}</small>` : ""}</div>
         <div class="gauge" aria-hidden="true"><b style="width:${Math.min(x.rsi, 100)}%"></b><i style="left:${today.threshold}%"></i><span style="left:${today.threshold}%">${today.threshold}</span><span style="left:30%">30</span><span style="left:70%">70</span></div>
       </div>
       ${x.spark ? `<div class="chartBox"><div class="spk"></div><div class="legend"><span><i></i>RSI ${today.threshold} 이하였던 날</span></div></div>` : ""}
@@ -477,7 +478,7 @@ addEventListener("resize", () => { if (innerWidth === lastW) return; lastW = inn
 async function loadDate(d) {
   try { today = await getJSON(`data/${d}.json`); } catch { today = null; }
   renderGuide(); renderHero(); renderCards();
-  $("foot").innerHTML = today ? `업데이트 ${today.generated} KST${today.failed ? ` · 조회 실패 ${today.failed}종목 제외` : ""}<br>RSI(${today.period})는 Wilder 방식. 과거 성과는 ${today.bt ? today.bt.from.slice(0, 4) + "~" + today.bt.to.slice(0, 4) + "년 " : ""}백테스트(다음 날 시가 매수, 비용 0.3% 차감, 현재 상장 종목 기준)이고, 미래 수익을 보장하지 않아요.` : "";
+  $("foot").innerHTML = today ? `업데이트 ${today.generated} KST${today.failed ? ` · 조회 실패 ${today.failed}종목 제외` : ""}<br>RSI(${today.period})는 Wilder 방식 (카드의 "앱 기준"은 증권사 앱과 같은 단순평균 방식, 참고용). 과거 성과는 ${today.bt ? today.bt.from.slice(0, 4) + "~" + today.bt.to.slice(0, 4) + "년 " : ""}백테스트(다음 날 시가 매수, 비용 0.3% 차감, 현재 상장 종목 기준)이고, 미래 수익을 보장하지 않아요.` : "";
 }
 (async () => {
   try { tracking = await getJSON("data/signals.json"); } catch {}
