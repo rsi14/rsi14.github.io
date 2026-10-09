@@ -322,6 +322,9 @@ def save_site_data(hits, base_date, scanned, failed, extra=None, site_dir="site/
         json.dump(idx, f, ensure_ascii=False)
 
 
+TRACK_TAG = f"sma{RSI_THRESHOLD:g}"  # 신호 기록 기준 (계산식·기준값)
+
+
 def update_tracking(results, breadth, site_dir="site/data"):
     """신호별 이후 추이를 signals.json에 누적 (백필 구간 밖의 기존 기록은 유지)"""
     import json
@@ -329,7 +332,7 @@ def update_tracking(results, breadth, site_dir="site/data"):
     path = f"{site_dir}/signals.json"
     try:
         with open(path, encoding="utf-8") as f:
-            book = {f"{s['code']}_{s['date']}": s for s in json.load(f)}
+            book = {f"{s['code']}_{s['date']}": s for s in json.load(f) if s.get("t") == TRACK_TAG}  # 기준이 바뀌면 옛 기록 정리
     except Exception:
         book = {}
     for r in results:
@@ -343,7 +346,7 @@ def update_tracking(results, breadth, site_dir="site/data"):
                 continue  # 이미 더 긴 기록이 있으면 유지
             b = breadth.get(s["date"], old.get("b") if old else None)
             book[key] = {"code": r["code"], "name": r["name"], "market": r["market"], **s,
-                         "b": round(b, 1) if b is not None else None}
+                         "b": round(b, 1) if b is not None else None, "t": TRACK_TAG}
     items = sorted(book.values(), key=lambda s: (s["date"], s["code"]), reverse=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(items, f, ensure_ascii=False, separators=(",", ":"))
