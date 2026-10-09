@@ -15,7 +15,7 @@ from email.mime.text import MIMEText
 import requests
 
 RSI_PERIOD = int(os.getenv("RSI_PERIOD", "14"))
-RSI_THRESHOLD = float(os.getenv("RSI_THRESHOLD", "10"))
+RSI_THRESHOLD = float(os.getenv("RSI_THRESHOLD", "20"))
 BREADTH_RSI = 30   # 시장 과매도 비율: RSI(14)가 이 값 이하인 종목 비율
 PANIC, PARTIAL = 25, 10  # 비율(%) 기준: 25↑ 시장 동반, 10~25 부분 동반, 10↓ 단독 하락
 KST = timezone(timedelta(hours=9))
@@ -88,12 +88,29 @@ def rsi_series(closes, period=14):
         d = closes[i] - closes[i - 1]
         gains.append(max(d, 0))
         losses.append(max(-d, 0))
-    # 국내 증권사 앱과 같은 단순평균 RSI: 최근 period일 상승폭 합 / (상승폭 합 + 하락폭 합)
-    for i in range(period, len(closes)):
-        g = sum(gains[i - period:i])
-        l = sum(losses[i - period:i])
-        out[i] = 50.0 if g + l == 0 else 100 * g / (g + l)
+    # 와일더 RSI (신호 판단·백테스트 기준)
+    avg_g = sum(gains[:period]) / period
+    avg_l = sum(losses[:period]) / period
+
+    def val(g, l):
+        return 100.0 if l == 0 else 100 - 100 / (1 + g / l)
+
+    out[period] = val(avg_g, avg_l)
+    for i in range(period, len(gains)):
+        avg_g = (avg_g * (period - 1) + gains[i]) / period
+        avg_l = (avg_l * (period - 1) + losses[i]) / period
+        out[i + 1] = val(avg_g, avg_l)
     return out
+
+
+def app_rsi(closes, period=14):
+    """참고용: 국내 증권사 앱 방식 단순평균 RSI (최근 period일 상승폭 합 / 전체 변동폭 합), 마지막 값"""
+    if len(closes) < period + 1:
+        return None
+    d = [closes[i] - closes[i - 1] for i in range(len(closes) - period, len(closes))]
+    g = sum(x for x in d if x > 0)
+    l = sum(-x for x in d if x < 0)
+    return 50.0 if g + l == 0 else 100 * g / (g + l)
 
 
 def wilder_rsi(closes, period=14):
@@ -140,7 +157,9 @@ def scan_one(market, code, name):
     if len(rows) < RSI_PERIOD + 1:
         return None
     last_date, last_close, last_vol = rows[-1]
-    rsis = rsi_series([c for _, c, _ in rows], RSI_PERIOD)
+    closes = [c for _, c, _ in rows]
+    rsis = rsi_series(closes, RSI_PERIOD)
+    arsi = app_rsi(closes, RSI_PERIOD)
     signals = find_signals(rows, rsis)
     rsi = rsis[-1]
     halted = last_vol == 0  # 거래정지 등
@@ -150,13 +169,13 @@ def scan_one(market, code, name):
     chg = (last_close / prev_close - 1) * 100 if prev_close else 0
     out = {
         "market": market, "code": code, "name": name, "date": last_date,
-        "close": last_close, "chg": chg, "rsi": rsi, "halted": halted, "signals": signals,
+        "close": last_close, "chg": chg, "rsi": rsi, "arsi": round(arsi, 1) if arsi is not None else None, "halted": halted, "signals": signals,
         "since": rows[max(WARMUP, len(rows) - BACKFILL_DAYS)][0] if len(rows) > WARMUP else last_date,
         "tail": [(rows[k][0], rsis[k]) for k in range(max(0, len(rows) - 200), len(rows))],
     }
     out["tv20"] = round(tv20_at(rows, len(rows) - 1), 1)  # 20일 평균 거래대금(억원)
-    out["lg"] = out["tv20"] >= 200 and any(  # 대형주 눌림: 최근 2거래일 내 RSI 기준값 아래로 진입
-        rsis[k] is not None and rsis[k - 1] is not None and rsis[k] <= RSI_THRESHOLD < rsis[k - 1] for k in (len(rows) - 2, len(rows) - 1))
+    out["lg"] = out["tv20"] >= 200 and any(  # 대형주 눌림: 최근 2거래일 내 RSI 25 아래로 진입
+        rsis[k] is not None and rsis[k - 1] is not None and rsis[k] <= 25 < rsis[k - 1] for k in (len(rows) - 2, len(rows) - 1))
     if rsi <= RSI_THRESHOLD or out["lg"]:
         for k in range(len(rows) - 1, max(WARMUP, len(rows) - 60), -1):  # RSI 기준 아래로 들어온 날
             if rsis[k] is not None and rsis[k - 1] is not None and rsis[k] <= RSI_THRESHOLD < rsis[k - 1]:
@@ -322,7 +341,7 @@ def save_site_data(hits, base_date, scanned, failed, extra=None, site_dir="site/
         json.dump(idx, f, ensure_ascii=False)
 
 
-TRACK_TAG = f"sma{RSI_THRESHOLD:g}"  # 신호 기록 기준 (계산식·기준값)
+TRACK_TAG = f"w{RSI_THRESHOLD:g}"  # 신호 기록 기준 (계산식·기준값)
 
 
 def update_tracking(results, breadth, site_dir="site/data"):
