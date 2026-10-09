@@ -200,7 +200,7 @@
       <button data-m="KOSDAQ">코스닥</button>
     </div>
     <div class="sp"></div>
-    <div class="hint">하락 유형 = RSI 20 아래로 들어온 날의 시장 과매도 비율 (25%↑ 동반 · 10~25% 부분 · 10%↓ 단독)<br>등급: 양호 = 시총 1조↑·거래대금 50억↑ · 잡주(시총 1천억↓·거래대금 10억↓·1,000원↓·관리/투자주의/정리매매 등)는 제외</div>
+    <div class="hint">하락 유형 = RSI 10 아래로 들어온 날의 시장 과매도 비율 (25%↑ 동반 · 10~25% 부분 · 10%↓ 단독)<br>등급: 양호 = 시총 1조↑·거래대금 50억↑ · 잡주(시총 1천억↓·거래대금 10억↓·1,000원↓·관리/투자주의/정리매매 등)는 제외</div>
   </div>
 
   <div class="cards" id="cards"></div>
@@ -360,7 +360,7 @@ function renderGuide() {
   const link = (x) => `<a href="#card-${x.code}">${x.name}</a>`;
   const top = picks.slice(0, 3), large = items.filter(isLarge).sort((a, c) => c.tv20 - a.tv20);
   const names = (arr, j) => arr.slice(0, 3).map(link).join(", ") + (arr.length > 3 ? ` 외 ${arr.length - 3}종목${j[0]}` : josa(arr.slice(0, 3).pop().name, j[0], j[1]));
-  const lg = large.length ? `<p><b>대형주 눌림</b> · ${names(large, ["을", "를"])} 사볼까요? 거래대금 200억↑ 종목이 RSI 25 아래로 들어왔어요. <b>매도: RSI 50 회복 시</b> (평균 16거래일). 과거 평균 <b class="pos">+4.3%</b>(승률 65%), 2021~2026년 매년 플러스였어요.</p>` : "";
+  const lg = large.length ? `<p><b>대형주 눌림</b> · ${names(large, ["을", "를"])} 사볼까요? 거래대금 200억↑ 종목이 RSI ${today.threshold} 아래로 들어왔어요. <b>매도: RSI 50 회복 시</b>.</p>` : "";
   const lastPanic = (today.bhist || []).filter((h) => h[1] >= panic).map((h) => h[0]).pop();
   const stat = (t) => bt[t] ? `과거 같은 조건은 5일 뒤 평균 <b class="${cls(bt[t].a5)}">${pct(bt[t].a5)}</b>(승률 ${bt[t].w5}%), 20일 뒤 <b class="${cls(bt[t].a20)}">${pct(bt[t].a20)}</b>(승률 ${bt[t].w20}%)였어요.` : "";
   if (top.length || large.length) {
