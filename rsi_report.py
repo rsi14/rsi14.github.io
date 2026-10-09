@@ -15,7 +15,7 @@ from email.mime.text import MIMEText
 import requests
 
 RSI_PERIOD = int(os.getenv("RSI_PERIOD", "14"))
-RSI_THRESHOLD = float(os.getenv("RSI_THRESHOLD", "20"))
+RSI_THRESHOLD = float(os.getenv("RSI_THRESHOLD", "10"))
 BREADTH_RSI = 30   # 시장 과매도 비율: RSI(14)가 이 값 이하인 종목 비율
 PANIC, PARTIAL = 25, 10  # 비율(%) 기준: 25↑ 시장 동반, 10~25 부분 동반, 10↓ 단독 하락
 KST = timezone(timedelta(hours=9))
@@ -155,8 +155,8 @@ def scan_one(market, code, name):
         "tail": [(rows[k][0], rsis[k]) for k in range(max(0, len(rows) - 200), len(rows))],
     }
     out["tv20"] = round(tv20_at(rows, len(rows) - 1), 1)  # 20일 평균 거래대금(억원)
-    out["lg"] = out["tv20"] >= 200 and any(  # 대형주 눌림: 최근 2거래일 내 RSI 25 아래로 진입
-        rsis[k] is not None and rsis[k - 1] is not None and rsis[k] <= 25 < rsis[k - 1] for k in (len(rows) - 2, len(rows) - 1))
+    out["lg"] = out["tv20"] >= 200 and any(  # 대형주 눌림: 최근 2거래일 내 RSI 기준값 아래로 진입
+        rsis[k] is not None and rsis[k - 1] is not None and rsis[k] <= RSI_THRESHOLD < rsis[k - 1] for k in (len(rows) - 2, len(rows) - 1))
     if rsi <= RSI_THRESHOLD or out["lg"]:
         for k in range(len(rows) - 1, max(WARMUP, len(rows) - 60), -1):  # RSI 기준 아래로 들어온 날
             if rsis[k] is not None and rsis[k - 1] is not None and rsis[k] <= RSI_THRESHOLD < rsis[k - 1]:
