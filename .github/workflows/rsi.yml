@@ -2,8 +2,11 @@ name: 국장 RSI 리포트
 
 on:
   schedule:
-    # 한국시간 월~금 오전 6:45 (UTC 일~목 21:45). GitHub 예약은 보통 수 분~20분 늦게 시작돼서 7시 전후 도착
-    - cron: "45 21 * * 0-4"
+    # 국장: 한국시간 월~금 16:30 (UTC 07:30) — 15:30 정규장 마감 후 당일 종가 기준
+    - cron: "30 7 * * 1-5"
+    # 미장: 한국시간 화~토 06:45 (UTC 월~금 21:45) — 미국 정규장 마감 후 전날 종가 기준
+    - cron: "45 21 * * 1-5"
+    # GitHub 예약은 보통 수 분~20분 늦게 시작. 수동 실행 시 국장·미장 모두 실행
   workflow_dispatch: {}  # Actions 탭에서 수동 실행 가능
 
 permissions:
@@ -28,7 +31,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install requests
-      - run: python rsi_report.py
+      - name: 국장
+        if: github.event_name != 'schedule' || github.event.schedule == '30 7 * * 1-5'
+        run: python rsi_report.py
         env:
           RSI_THRESHOLD: "20"
           RSI_PERIOD: "14"
@@ -39,10 +44,12 @@ jobs:
           MAIL_TO: ${{ secrets.MAIL_TO }}
 
       - name: 미장
+        if: github.event_name != 'schedule' || github.event.schedule == '45 21 * * 1-5'
         continue-on-error: true
         run: pip install yfinance && python us_report.py
 
       - name: 의원 매매
+        if: github.event_name != 'schedule' || github.event.schedule == '45 21 * * 1-5'
         continue-on-error: true
         run: pip install pdfplumber && python congress.py
 
