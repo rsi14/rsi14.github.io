@@ -66,7 +66,7 @@
   .t-동반 { background: var(--goodbg); color: var(--good); }
   .t-부분 { background: var(--midbg); color: var(--mid); }
   .t-단독 { background: var(--badbg); color: var(--up); }
-  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 10px; }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin: 0 6px 10px 0; }
   .st-panic { background: var(--goodbg); color: var(--good); }
   .st-warn { background: var(--midbg); color: var(--mid); }
   .st-calm { background: var(--badbg); color: var(--bad); }
@@ -338,17 +338,34 @@ function avgAt(list, k) {
 }
 function avgPath(list) { return Array.from({ length: TRACK_DAYS }, (_, k) => { const a = avgAt(list, k + 1); return a ? a.avg : null; }); }
 
+// 오늘 급락: 코스피·코스닥 -2% 이하 또는 하락 종목 70% 이상 → 표시 문구, 아니면 null
+function crash() {
+  const ix = today.idx || {}, names = { KOSPI: "코스피", KOSDAQ: "코스닥" };
+  const worst = Object.keys(names).filter((k) => ix[k] != null).sort((a, c) => ix[a] - ix[c])[0];
+  if (worst && ix[worst] <= -2) return `${names[worst]} ${pct(ix[worst])}`;
+  if (today.down != null && today.down >= 70) return `하락 종목 ${today.down.toFixed(0)}%`;
+  return null;
+}
+// 과매도 증가: 시장 과매도 비율이 5거래일 전보다 2배 이상(그리고 5% 이상) → [이전, 오늘]
+function breadthRise() {
+  const h = today.bhist || [];
+  if (h.length < 6) return null;
+  const prev = h[h.length - 6][1], cur = h[h.length - 1][1];
+  return prev > 0 && cur >= 5 && cur >= prev * 2 ? [prev, cur] : null;
+}
+
 function renderHero() {
   if (!today) return;
   const items = today.items, b = today.breadth, panic = today.panic || 25, partial = today.partial || 10;
   const cnt = (t) => items.filter((x) => x.type === t).length;
   $("basis").textContent = `${today.date} 종가 기준 · ${fmt(today.scanned)}종목 스캔`;
-  const falling = today.down != null && today.down >= 70;
-  const stt = b == null ? null : b >= panic ? ["st-panic", "시장 패닉"] : b >= partial ? ["st-warn", "약한 동반 하락"] : falling ? ["st-warn", "하락 시작"] : ["st-calm", "평온한 시장"];
-  const ix = today.idx || {};
+  const stt = b == null ? null : b >= panic ? ["st-panic", "시장 패닉"] : b >= partial ? ["st-warn", "약한 동반 하락"] : ["st-calm", "평온한 시장"];
+  const ix = today.idx || {}, cr = crash(), rs = breadthRise();
   $("dayBox").innerHTML = today.down != null ? `<span>오늘 하락 종목 <b class="${today.down >= 50 ? "neg" : "pos"}">${today.down.toFixed(0)}%</b></span>` +
     [["KOSPI", "코스피"], ["KOSDAQ", "코스닥"]].filter(([k]) => ix[k] != null).map(([k, n]) => `<span>${n} <b class="${cls(ix[k])}">${pct(ix[k])}</b></span>`).join("") : "";
-  $("status").innerHTML = stt ? `<span class="status ${stt[0]}">● ${stt[1]}</span>` : "";
+  $("status").innerHTML = (stt ? `<span class="status ${stt[0]}">● ${stt[1]}</span>` : "") +
+    (cr ? `<span class="status st-warn">오늘 급락 · ${cr}</span>` : "") +
+    (rs ? `<span class="status st-warn">과매도 증가 ${rs[0].toFixed(1)}→${rs[1].toFixed(1)}%</span>` : "");
   $("headline").innerHTML = b != null
     ? `시장 과매도 비율 <em>${b.toFixed(1)}%</em>`
     : `RSI ${today.threshold} 이하 ${items.length}종목`;
@@ -390,7 +407,7 @@ function renderGuide() {
     g.className = "guide";
     g.innerHTML = `<div class="eyebrow">오늘의 가이드</div>
       <h2>오늘은 쉬어가는 날이에요</h2>
-      <p>시장 과매도 비율이 ${b != null ? b.toFixed(1) + "%" : "–"}로 ${b != null && b < 10 ? (today.down != null && today.down >= 70 ? `아직 과매도 수준은 아니지만, 오늘 ${today.down.toFixed(0)}% 종목이 하락했어요` : "평온해요") : "패닉 수준이 아니에요"}. 지금 RSI ${today.threshold} 아래 종목은 ${items.length ? items.length + "개 있지만 시장 전체가 같이 빠진 게 아니에요" : "잡주를 빼면 없어요"}. ${bt["단독"] ? `혼자 빠진 종목은 과거 20일 뒤 평균 <b class="${cls(bt["단독"].a20)}">${pct(bt["단독"].a20)}</b>(승률 ${bt["단독"].w20}%)였어요.` : ""}</p>
+      <p>시장 과매도 비율이 ${b != null ? b.toFixed(1) + "%" : "–"}로 ${b != null && b < 10 ? (crash() ? `아직 과매도 수준은 아니지만, 오늘 급락했어요(${crash()})` : "평온해요") : "패닉 수준이 아니에요"}. 지금 RSI ${today.threshold} 아래 종목은 ${items.length ? items.length + "개 있지만 시장 전체가 같이 빠진 게 아니에요" : "잡주를 빼면 없어요"}. ${bt["단독"] ? `혼자 빠진 종목은 과거 20일 뒤 평균 <b class="${cls(bt["단독"].a20)}">${pct(bt["단독"].a20)}</b>(승률 ${bt["단독"].w20}%)였어요.` : ""}</p>
       <p class="how">시장 과매도 비율이 ${panic}%를 넘는 날 매수 후보가 나와요.${lastPanic ? ` 마지막으로 넘은 날: ${ymd(lastPanic)}` : ""}</p>`;
   }
   const lgc = today.lgc || [];
