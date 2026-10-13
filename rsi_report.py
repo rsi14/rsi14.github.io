@@ -176,6 +176,11 @@ def scan_one(market, code, name):
     out["tv20"] = round(tv20_at(rows, len(rows) - 1), 1)  # 20일 평균 거래대금(억원)
     out["lg"] = out["tv20"] >= 200 and any(  # 대형주 눌림: 최근 2거래일 내 RSI 25 아래로 진입
         rsis[k] is not None and rsis[k - 1] is not None and rsis[k] <= 25 < rsis[k - 1] for k in (len(rows) - 2, len(rows) - 1))
+    if out["tv20"] >= 200 and not out["lg"] and rsi < 25:  # 계속 눌림: 3거래일 이상 전에 RSI 25 아래로 들어와 아직 그 아래
+        for k in range(len(rows) - 3, max(WARMUP, len(rows) - 60), -1):
+            if rsis[k] is not None and rsis[k - 1] is not None and rsis[k] <= 25 < rsis[k - 1]:
+                out["lgc"] = {"since": rows[k][0], "ret": round((last_close / rows[k][1] - 1) * 100, 2)}
+                break
     if rsi <= RSI_THRESHOLD or out["lg"]:
         for k in range(len(rows) - 1, max(WARMUP, len(rows) - 60), -1):  # RSI 기준 아래로 들어온 날
             if rsis[k] is not None and rsis[k - 1] is not None and rsis[k] <= RSI_THRESHOLD < rsis[k - 1]:
@@ -323,7 +328,7 @@ def save_site_data(hits, base_date, scanned, failed, extra=None, site_dir="site/
         "generated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
         **(extra or {}),
         "items": sorted(
-            [{k: (round(v, 2) if isinstance(v, float) else v) for k, v in h.items() if k not in ("date", "signals", "halted", "since", "tail")} for h in hits],
+            [{k: (round(v, 2) if isinstance(v, float) else v) for k, v in h.items() if k not in ("date", "signals", "halted", "since", "tail", "lgc")} for h in hits],
             key=lambda x: x["rsi"],
         ),
     }
@@ -439,6 +444,17 @@ def backtest_summary(path="site/data/backtest.json"):
     return out
 
 
+def index_change(symbol, base_date):
+    """지수 당일 등락률(%) — 실패하거나 기준일이 다르면 None"""
+    try:
+        rows = get_daily(symbol, count=5)
+        if len(rows) >= 2 and rows[-1][0] == base_date and rows[-2][1]:
+            return round((rows[-1][1] / rows[-2][1] - 1) * 100, 2)
+    except Exception as e:
+        print(f"[지수 조회 실패] {symbol}: {e!r}")
+    return None
+
+
 def main():
     universe = [("KOSPI", c, n) for c, n in list_stocks("KOSPI")]
     universe += [("KOSDAQ", c, n) for c, n in list_stocks("KOSDAQ")]
@@ -467,6 +483,14 @@ def main():
     breadth = market_breadth(results)
     today_b = breadth.get(base_date)
     print(f"시장 과매도 비율(RSI {BREADTH_RSI}↓): {today_b}")
+
+    live = [r for r in current if not r["halted"]]
+    down = round(sum(r["chg"] < 0 for r in live) / len(live) * 100, 1) if live else None  # 오늘 하락 종목 비율(%)
+    idx = {m: index_change(m, base_date) for m in ("KOSPI", "KOSDAQ")}
+    lgc = sorted(({"code": r["code"], "name": r["name"], "market": r["market"], "rsi": round(r["rsi"], 1),
+                   "arsi": r.get("arsi"), "tv20": r["tv20"], **r["lgc"]} for r in live if r.get("lgc")),
+                 key=lambda x: -x["tv20"])[:15]
+    print(f"오늘 하락 종목 {down}% · 지수 {idx} · 계속 눌림 {len(lgc)}종목")
 
     hits = [r for r in current if (r["rsi"] <= RSI_THRESHOLD or r["lg"]) and not r["halted"]]
     raw_n = len(hits)
@@ -497,6 +521,7 @@ def main():
         "bhist": [[d, round(breadth[d], 1)] for d in dates],
         "panic": PANIC, "partial": PARTIAL, "brsi": BREADTH_RSI, "raw": raw_n,
         "bt": backtest_summary(),
+        "down": down, "idx": idx, "lgc": lgc,
     })
 
     subject = f"[RSI 리포트] {datetime.now(KST):%Y-%m-%d} 국장 RSI {RSI_THRESHOLD:g} 이하 {len(hits)}종목"
