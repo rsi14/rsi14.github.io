@@ -70,6 +70,12 @@
   .st-panic { background: var(--goodbg); color: var(--good); }
   .st-warn { background: var(--midbg); color: var(--mid); }
   .st-calm { background: var(--badbg); color: var(--bad); }
+  .day { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 14px; font-size: 13px; color: var(--ink2); }
+  .day b { font-family: var(--mono); }
+  .lgc { margin-top: 12px; border-top: 1px solid var(--grid); padding-top: 10px; }
+  .lgc ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+  .lgc li { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+  .lgc li span:last-child { color: var(--ink2); font-family: var(--mono); font-size: 12px; text-align: right; }
   .bt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
   .bt div { background: var(--bg); border-radius: 10px; padding: 8px 10px; font-size: 11px; color: var(--muted); }
   .bt b { display: block; font-size: 15px; margin-top: 2px; }
@@ -175,6 +181,7 @@
       <div id="status"></div>
       <h1 id="headline">불러오는 중…</h1>
       <p id="subline"></p>
+      <div class="day" id="dayBox"></div>
       <div class="bt" id="btBox"></div>
     </div>
     <div class="heroChart">
@@ -336,7 +343,11 @@ function renderHero() {
   const items = today.items, b = today.breadth, panic = today.panic || 25, partial = today.partial || 10;
   const cnt = (t) => items.filter((x) => x.type === t).length;
   $("basis").textContent = `${today.date} 종가 기준 · ${fmt(today.scanned)}종목 스캔`;
-  const stt = b == null ? null : b >= panic ? ["st-panic", "시장 패닉"] : b >= partial ? ["st-warn", "약한 동반 하락"] : ["st-calm", "평온한 시장"];
+  const falling = today.down != null && today.down >= 70;
+  const stt = b == null ? null : b >= panic ? ["st-panic", "시장 패닉"] : b >= partial ? ["st-warn", "약한 동반 하락"] : falling ? ["st-warn", "하락 시작"] : ["st-calm", "평온한 시장"];
+  const ix = today.idx || {};
+  $("dayBox").innerHTML = today.down != null ? `<span>오늘 하락 종목 <b class="${today.down >= 50 ? "neg" : "pos"}">${today.down.toFixed(0)}%</b></span>` +
+    [["KOSPI", "코스피"], ["KOSDAQ", "코스닥"]].filter(([k]) => ix[k] != null).map(([k, n]) => `<span>${n} <b class="${cls(ix[k])}">${pct(ix[k])}</b></span>`).join("") : "";
   $("status").innerHTML = stt ? `<span class="status ${stt[0]}">● ${stt[1]}</span>` : "";
   $("headline").innerHTML = b != null
     ? `시장 과매도 비율 <em>${b.toFixed(1)}%</em>`
@@ -379,9 +390,12 @@ function renderGuide() {
     g.className = "guide";
     g.innerHTML = `<div class="eyebrow">오늘의 가이드</div>
       <h2>오늘은 쉬어가는 날이에요</h2>
-      <p>시장 과매도 비율이 ${b != null ? b.toFixed(1) + "%" : "–"}로 ${b != null && b < 10 ? "평온해요" : "패닉 수준이 아니에요"}. 지금 RSI ${today.threshold} 아래 종목은 ${items.length ? items.length + "개 있지만 시장 전체가 같이 빠진 게 아니에요" : "잡주를 빼면 없어요"}. ${bt["단독"] ? `혼자 빠진 종목은 과거 20일 뒤 평균 <b class="${cls(bt["단독"].a20)}">${pct(bt["단독"].a20)}</b>(승률 ${bt["단독"].w20}%)였어요.` : ""}</p>
+      <p>시장 과매도 비율이 ${b != null ? b.toFixed(1) + "%" : "–"}로 ${b != null && b < 10 ? (today.down != null && today.down >= 70 ? `아직 과매도 수준은 아니지만, 오늘 ${today.down.toFixed(0)}% 종목이 하락했어요` : "평온해요") : "패닉 수준이 아니에요"}. 지금 RSI ${today.threshold} 아래 종목은 ${items.length ? items.length + "개 있지만 시장 전체가 같이 빠진 게 아니에요" : "잡주를 빼면 없어요"}. ${bt["단독"] ? `혼자 빠진 종목은 과거 20일 뒤 평균 <b class="${cls(bt["단독"].a20)}">${pct(bt["단독"].a20)}</b>(승률 ${bt["단독"].w20}%)였어요.` : ""}</p>
       <p class="how">시장 과매도 비율이 ${panic}%를 넘는 날 매수 후보가 나와요.${lastPanic ? ` 마지막으로 넘은 날: ${ymd(lastPanic)}` : ""}</p>`;
   }
+  const lgc = today.lgc || [];
+  if (lgc.length) g.innerHTML += `<div class="lgc"><p><b>계속 눌림</b> · 진입 3거래일↑, 아직 RSI 25 아래 · 참고용</p><ul>${lgc.map((x) =>
+    `<li><span>${x.name}</span><span>RSI ${x.rsi.toFixed(1)} · ${ymd(x.since)} 진입 · 진입 후 <b class="${cls(x.ret)}">${pct(x.ret)}</b></span></li>`).join("")}</ul><p class="how">RSI 25 위로 올라오면 목록에서 빠져요.</p></div>`;
 }
 
 function renderCards() {
