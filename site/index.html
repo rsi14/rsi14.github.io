@@ -74,8 +74,11 @@
   .day b { font-family: var(--mono); }
   .lgc { margin-top: 12px; border-top: 1px solid var(--grid); padding-top: 10px; }
   .lgc ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
-  .lgc li { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
-  .lgc li span:last-child { color: var(--ink2); font-family: var(--mono); font-size: 12px; text-align: right; }
+  .lgc li { font-size: 14px; padding: 4px 0; }
+  .lgc .r1 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .lgc .r1 b { white-space: nowrap; }
+  .lgc .r1 span { white-space: nowrap; color: var(--ink2); font-size: 13px; }
+  .lgc .r2 { font-size: 12px; color: var(--ink2); }
   .bt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
   .bt div { background: var(--bg); border-radius: 10px; padding: 8px 10px; font-size: 11px; color: var(--muted); }
   .bt b { display: block; font-size: 15px; margin-top: 2px; }
@@ -251,7 +254,9 @@ const ORDER = { "양호": 0, "보통": 1, "주의": 2 };
 const TORDER = { "동반": 0, "부분": 1, "단독": 2 };
 const TLABEL = { "동반": "시장 동반", "부분": "부분 동반", "단독": "단독 하락" };
 const typeOf = (b) => b == null ? null : b >= 25 ? "동반" : b >= 10 ? "부분" : "단독";
-const clean = (x) => x.grade !== "주의" && !(x.flags && x.flags.length);
+const noPer = (x) => !US && x.per == null;  // 국장: PER 없는 종목(적자 등)은 추천 제외
+const clean0 = (x) => x.grade !== "주의" && !(x.flags && x.flags.length);
+const clean = (x) => clean0(x) && !noPer(x);
 // 매수 후보: 시장 동반 하락 + 양호/보통 + 위험표시 없음 / 관찰: 부분 동반 + 양호
 const pickScore = (x) => x.type === "동반" && clean(x) ? (x.grade === "양호" ? 1000 : 0) + Math.min(x.tv20 || 0, 500) + (20 - x.rsi) : null;
 const isWatch = (x) => x.type === "부분" && x.grade === "양호" && clean(x);
@@ -412,7 +417,7 @@ function renderGuide() {
   }
   const lgc = today.lgc || [];
   if (lgc.length) g.innerHTML += `<div class="lgc"><p><b>계속 눌림</b> · 진입 3거래일↑, 아직 RSI 25 아래 · 참고용</p><ul>${lgc.map((x) =>
-    `<li><span>${x.name}</span><span>RSI ${x.rsi.toFixed(1)} · ${ymd(x.since)} 진입 · 진입 후 <b class="${cls(x.ret)}">${pct(x.ret)}</b></span></li>`).join("")}</ul><p class="how">RSI 25 위로 올라오면 목록에서 빠져요.</p></div>`;
+    `<li><div class="r1"><b>${x.name}</b><span>RSI ${x.rsi.toFixed(1)}</span></div><div class="r2">${+x.since.slice(4, 6)}/${+x.since.slice(6)} 진입 · 진입 후 <b class="${cls(x.ret)}">${pct(x.ret)}</b></div></li>`).join("")}</ul><p class="how">RSI 25 위로 올라오면 목록에서 빠져요.</p></div>`;
 }
 
 function renderCards() {
@@ -427,7 +432,7 @@ function renderCards() {
     <article class="card ${pickScore(x) != null || isLarge(x) ? "pick" : x.grade === "주의" ? "dim" : ""}" id="card-${x.code}" data-code="${x.code}">
       <div class="head">
         <div class="who">
-          <div class="nm">${x.name}${pickScore(x) != null ? `<span class="pill pick-tag">매수 후보 · 5일 보유</span>` : isLarge(x) ? `<span class="pill pick-tag">대형주 눌림 · RSI 50 매도</span>` : isWatch(x) ? `<span class="pill watch-tag">관찰</span>` : ""}${x.type ? `<span class="pill t-${x.type}">${TLABEL[x.type]}</span>` : ""}<span class="pill g-${x.grade || "보통"}"><i></i>${x.grade || "–"}</span></div>
+          <div class="nm">${x.name}${pickScore(x) != null ? `<span class="pill pick-tag">매수 후보 · 5일 보유</span>` : isLarge(x) ? `<span class="pill pick-tag">대형주 눌림 · RSI 50 매도</span>` : isWatch(x) ? `<span class="pill watch-tag">관찰</span>` : clean0(x) && noPer(x) && (x.lg || x.type === "동반" || x.type === "부분") ? `<span class="pill watch-tag">PER 없음 · 추천 제외</span>` : ""}${x.type ? `<span class="pill t-${x.type}">${TLABEL[x.type]}</span>` : ""}<span class="pill g-${x.grade || "보통"}"><i></i>${x.grade || "–"}</span></div>
           <div class="sub">${US ? x.market : x.market === "KOSPI" ? "코스피" : "코스닥"} · ${x.code}</div>
         </div>
         <div class="px"><div class="p num">${money(x.close)}</div><div class="c num ${cls(x.chg)}">${pct(x.chg)}</div></div>
