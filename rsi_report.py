@@ -214,6 +214,18 @@ def safe_json(url, params=None):
         return None
 
 
+def fetch_per(code):
+    """PER만 조회 (적자 등으로 없으면 None)"""
+    info = safe_json(f"https://m.stock.naver.com/api/stock/{code}/integration") or {}
+    for t in info.get("totalInfos", []) or []:
+        if str(t.get("code", "")) == "per":
+            try:
+                return float(str(t.get("value")).replace(",", "").replace("배", ""))
+            except Exception:
+                return None
+    return None
+
+
 def enrich(hit):
     """해당 종목만 추가 조회: 시총·PER·PBR·위험 표시·최근 뉴스 (실패해도 리포트는 진행)"""
     code = hit["code"]
@@ -489,7 +501,11 @@ def main():
     idx = {m: index_change(m, base_date) for m in ("KOSPI", "KOSDAQ")}
     lgc = sorted(({"code": r["code"], "name": r["name"], "market": r["market"], "rsi": round(r["rsi"], 1),
                    "arsi": r.get("arsi"), "tv20": r["tv20"], **r["lgc"]} for r in live if r.get("lgc")),
-                 key=lambda x: -x["tv20"])[:15]
+                 key=lambda x: -x["tv20"])
+    with ThreadPoolExecutor(max_workers=6) as ex:  # PER 없는 종목(적자 등) 제외
+        for x, per in zip(lgc, ex.map(fetch_per, [x["code"] for x in lgc])):
+            x["per"] = per
+    lgc = [x for x in lgc if x["per"] is not None][:15]
     print(f"오늘 하락 종목 {down}% · 지수 {idx} · 계속 눌림 {len(lgc)}종목")
 
     hits = [r for r in current if (r["rsi"] <= RSI_THRESHOLD or r["lg"]) and not r["halted"]]
