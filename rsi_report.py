@@ -103,6 +103,21 @@ def rsi_series(closes, period=14):
     return out
 
 
+def cutler_series(closes, period=14):
+    """단순평균(커틀러) RSI 리스트 — 국내 증권사 앱 방식 (미장 신호용)"""
+    out = [None] * len(closes)
+    d = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+    for i in range(period, len(closes)):
+        w = d[i - period:i]
+        g = sum(x for x in w if x > 0)
+        l = sum(-x for x in w if x < 0)
+        out[i] = 50.0 if g + l == 0 else 100 * g / (g + l)
+    return out
+
+
+SIGNAL_RSI = None  # 신호용 RSI 함수 (None이면 와일더). 시장 과매도 비율은 항상 와일더로 계산
+
+
 def app_rsi(closes, period=14):
     """참고용: 국내 증권사 앱 방식 단순평균 RSI (최근 period일 상승폭 합 / 전체 변동폭 합), 마지막 값"""
     if len(closes) < period + 1:
@@ -158,7 +173,8 @@ def scan_one(market, code, name):
         return None
     last_date, last_close, last_vol = rows[-1]
     closes = [c for _, c, _ in rows]
-    rsis = rsi_series(closes, RSI_PERIOD)
+    wr = rsi_series(closes, RSI_PERIOD)  # 와일더 (시장 과매도 비율용)
+    rsis = SIGNAL_RSI(closes, RSI_PERIOD) if SIGNAL_RSI else wr
     arsi = app_rsi(closes, RSI_PERIOD)
     signals = find_signals(rows, rsis)
     rsi = rsis[-1]
@@ -171,7 +187,7 @@ def scan_one(market, code, name):
         "market": market, "code": code, "name": name, "date": last_date,
         "close": last_close, "chg": chg, "rsi": rsi, "arsi": round(arsi, 1) if arsi is not None else None, "halted": halted, "signals": signals,
         "since": rows[max(WARMUP, len(rows) - BACKFILL_DAYS)][0] if len(rows) > WARMUP else last_date,
-        "tail": [(rows[k][0], rsis[k]) for k in range(max(0, len(rows) - 200), len(rows))],
+        "tail": [(rows[k][0], wr[k]) for k in range(max(0, len(rows) - 200), len(rows))],
     }
     out["tv20"] = round(tv20_at(rows, len(rows) - 1), 1)  # 20일 평균 거래대금(억원)
     out["lg"] = out["tv20"] >= 200 and any(  # 대형주 눌림: 최근 2거래일 내 RSI 25 아래로 진입
