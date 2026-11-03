@@ -11,6 +11,22 @@ import rsi_report as K
 os.environ.setdefault("BREADTH_MIN_N", "200")
 K.MIN_PRICE, K.MIN_TV = 5, 0.1  # $5 미만, 20일 평균 거래대금 $1천만 미만 제외
 OUT = "site/data/us"
+# 미장 신호: 단순평균(커틀러) RSI 14, 10 이하 — 10년 백테스트(us_backtest.py) 기준. 시장 과매도 비율은 와일더 유지
+K.SIGNAL_RSI, K.RSI_THRESHOLD, K.TRACK_TAG = K.cutler_series, 10.0, "c10"
+
+
+def us_bt_summary(path="site/data/us/bt_compare.json"):
+    """미장 백테스트(커틀러 10)의 하락 유형별 성과"""
+    import json
+    try:
+        o = json.load(open(path, encoding="utf-8"))
+    except Exception:
+        return None
+    out = {"from": o["from"], "to": o["to"], "cost": o.get("cost")}
+    for r in o["rows"]:
+        if r["rule"] == "C10" and r["dim"] == "b" and "a20" in r:
+            out[r["val"]] = {k: r[k] for k in ("n", "a5", "w5", "a20", "w20")}
+    return out
 SRC = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv"
 
 
@@ -62,7 +78,7 @@ def main():
     K.save_site_data(hits, base, len(cur), len(uni) - len(results), extra={
         "breadth": round(tb, 1) if tb is not None else None,
         "bhist": [[d, round(breadth[d], 1)] for d in dates],
-        "panic": K.PANIC, "partial": K.PARTIAL, "brsi": K.BREADTH_RSI, "raw": len(hits), "bt": None,
+        "panic": K.PANIC, "partial": K.PARTIAL, "brsi": K.BREADTH_RSI, "raw": len(hits), "bt": us_bt_summary(), "rsi_kind": "cutler",
     }, site_dir=OUT)
     print(f"미장 기준일 {base}, 과매도 비율 {tb}, RSI {K.RSI_THRESHOLD:g} 이하 {len(hits)}종목")
 
