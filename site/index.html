@@ -211,14 +211,14 @@
       <button data-m="KOSDAQ">코스닥</button>
     </div>
     <div class="sp"></div>
-    <div class="hint">하락 유형 = RSI 20 아래로 들어온 날의 시장 과매도 비율 (25%↑ 동반 · 10~25% 부분 · 10%↓ 단독)<br>등급: 양호 = 시총 1조↑·거래대금 50억↑ · 잡주(시총 1천억↓·거래대금 10억↓·1,000원↓·관리/투자주의/정리매매 등)는 제외</div>
+    <div class="hint">하락 유형 = RSI <span class="thr">20</span> 아래로 들어온 날의 시장 과매도 비율 (25%↑ 동반 · 10~25% 부분 · 10%↓ 단독)<br>등급: 양호 = 시총 1조↑·거래대금 50억↑ · 잡주(시총 1천억↓·거래대금 10억↓·1,000원↓·관리/투자주의/정리매매 등)는 제외</div>
   </div>
 
   <div class="cards" id="cards"></div>
 
   <section class="sec">
     <h2>지난 신호, 지금은?</h2>
-    <p>RSI가 20 아래로 떨어진 날 종가를 기준으로, 이후 60거래일 동안의 수익률 (최근 약 6개월 신호)</p>
+    <p>RSI가 <span class="thr">20</span> 아래로 떨어진 날 종가를 기준으로, 이후 60거래일 동안의 수익률 (최근 약 6개월 신호)</p>
     <div class="stats" id="hStats"></div>
     <div class="panel pad" style="margin-top:10px"><div id="avgChart"></div></div>
     <div class="bar" style="margin:12px 0 10px">
@@ -402,7 +402,7 @@ function renderGuide() {
     g.innerHTML = `<div class="eyebrow">오늘의 가이드 · 매수 후보 ${picks.length + large.length}종목</div>
       <h2>${names(top.length ? top : large, ["을", "를"])} 사볼까요?</h2>
       ${top.length ? `<p><b>시장 패닉</b> · 시장 전체가 같이 빠진 날(과매도 비율 ${b != null ? b.toFixed(1) + "%" : "–"}) 함께 떨어진 종목이에요. <b>매도: 5거래일 뒤</b>. ${bt["동반"] ? `과거 5일 뒤 평균 <b class="${cls(bt["동반"].a5)}">${pct(bt["동반"].a5)}</b>(승률 ${bt["동반"].w5}%), 매년 플러스였어요.` : ""}</p>` : ""}${lg}
-      <p class="how">백테스트 방식: 다음 날 시가 매수 · 비용 0.3% 차감. 한 번에 다 사기보다 나눠서 들어가는 걸 기준으로 보세요.${watch.length ? ` 관찰 종목: ${watch.slice(0, 3).map(link).join(", ")}` : ""}</p>`;
+      <p class="how">백테스트 방식: 다음 날 시가 매수 · 비용 ${US ? "0.1" : "0.3"}% 차감. 한 번에 다 사기보다 나눠서 들어가는 걸 기준으로 보세요.${watch.length ? ` 관찰 종목: ${watch.slice(0, 3).map(link).join(", ")}` : ""}</p>`;
   } else if (watch.length) {
     g.className = "guide";
     g.innerHTML = `<div class="eyebrow">오늘의 가이드 · 확실한 후보 없음</div>
@@ -438,7 +438,7 @@ function renderCards() {
         <div class="px"><div class="p num">${money(x.close)}</div><div class="c num ${cls(x.chg)}">${pct(x.chg)}</div></div>
       </div>
       <div class="rsiRow">
-        <div class="rsiVal">RSI <b>${x.rsi.toFixed(1)}</b>${x.arsi != null ? `<small class="arsi">앱 기준 ${x.arsi.toFixed(1)}</small>` : ""}</div>
+        <div class="rsiVal">RSI <b>${x.rsi.toFixed(1)}</b>${x.arsi != null && !US ? `<small class="arsi">앱 기준 ${x.arsi.toFixed(1)}</small>` : ""}</div>
         <div class="gauge" aria-hidden="true"><b style="width:${Math.min(x.rsi, 100)}%"></b><i style="left:${today.threshold}%"></i><span style="left:${today.threshold}%">${today.threshold}</span><span style="left:30%">30</span><span style="left:70%">70</span></div>
       </div>
       ${x.spark ? `<div class="chartBox"><div class="spk"></div><div class="legend"><span><i></i>RSI ${today.threshold} 이하였던 날</span></div></div>` : ""}
@@ -514,7 +514,8 @@ addEventListener("resize", () => { if (innerWidth === lastW) return; lastW = inn
 async function loadDate(d) {
   try { today = await getJSON(`data/${d}.json`); } catch { today = null; }
   renderGuide(); renderHero(); renderCards();
-  $("foot").innerHTML = today ? `업데이트 ${today.generated} KST${today.failed ? ` · 조회 실패 ${today.failed}종목 제외` : ""}<br>RSI(${today.period})는 Wilder 방식 (카드의 "앱 기준"은 증권사 앱과 같은 단순평균 방식, 참고용). 과거 성과는 ${today.bt ? today.bt.from.slice(0, 4) + "~" + today.bt.to.slice(0, 4) + "년 " : ""}백테스트(다음 날 시가 매수, 비용 0.3% 차감, 현재 상장 종목 기준)이고, 미래 수익을 보장하지 않아요.` : "";
+  document.querySelectorAll(".thr").forEach((e) => { e.textContent = today ? today.threshold : 20; });
+  $("foot").innerHTML = today ? `업데이트 ${today.generated} KST${today.failed ? ` · 조회 실패 ${today.failed}종목 제외` : ""}<br>RSI(${today.period})는 ${US ? "단순평균 방식(국내 증권사 앱과 같음). 시장 과매도 비율만 Wilder 방식" : `Wilder 방식 (카드의 "앱 기준"은 증권사 앱과 같은 단순평균 방식, 참고용)`}. 과거 성과는 ${today.bt ? today.bt.from.slice(0, 4) + "~" + today.bt.to.slice(0, 4) + "년 " : ""}백테스트(다음 날 시가 매수, 비용 ${US ? "0.1" : "0.3"}% 차감, 현재 ${US ? "S&P500" : "상장"} 종목 기준)이고, 미래 수익을 보장하지 않아요.` : "";
 }
 (async () => {
   try { tracking = await getJSON("data/signals.json"); } catch {}
